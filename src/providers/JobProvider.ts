@@ -7,6 +7,6 @@
  * file that was distributed with this source code.
  */
 
-import { debuglog } from 'node:util'
+import { ServiceProvider } from '@athenna/ioc'
 
-export const debug = debuglog('athenna:queue')
+export class JobProvider extends ServiceProvider {}

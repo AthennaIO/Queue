@@ -1,12 +1,12 @@
 {
-  "name": "@athenna/template",
+  "name": "@athenna/queue",
   "version": "1.0.0",
   "description": "Template for new projects.",
   "license": "MIT",
   "author": "João Lenon <lenon@athenna.io>",
-  "bugs": "https://github.com/AthennaIO/Template/issues",
-  "repository": "https://github.com/AthennaIO/Template.git",
-  "homepage": "https://github.com/AthennaIO/Template#readme",
+  "bugs": "https://github.com/AthennaIO/Queue/issues",
+  "repository": "https://github.com/AthennaIO/Queue.git",
+  "homepage": "https://github.com/AthennaIO/Queue#readme",
   "keywords": [
     "esm",
     "athenna"
@@ -51,6 +51,9 @@
   },
   "devDependencies": {
     "@athenna/common": "^4.39.0",
+    "@athenna/config": "^4.21.0",
+    "@athenna/database": "^4.52.0",
+    "@athenna/ioc": "^4.20.0",
     "@athenna/test": "^4.23.0",
     "@athenna/tsconfig": "^4.12.0",
     "@typescript-eslint/eslint-plugin": "^6.7.4",

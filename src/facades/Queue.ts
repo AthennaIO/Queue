@@ -7,6 +7,7 @@
  * file that was distributed with this source code.
  */
 
-import { debuglog } from 'node:util'
+import { Facade } from '@athenna/ioc'
+import type { QueueImpl } from '#src/queue/QueueImpl'
 
-export const debug = debuglog('athenna:queue')
+export const Queue = Facade.createFor<QueueImpl>('Athenna/Core/Queue')
