@@ -8,15 +8,51 @@
  */
 
 import { Log } from '@athenna/logger'
-import { Options } from '@athenna/common'
-import { Driver } from '#src/drivers/Driver'
+import { Json, Options } from '@athenna/common'
 import type { ConnectionOptions } from '#src/types'
 
-export class VanillaDriver extends Driver {
-  private defineQueue() {
-    if (!this.client.queues[this.queueName]) {
-      this.client.queues[this.queueName] = []
+export class FakeDriver {
+  public constructor(connection?: string, client?: any) {
+    FakeDriver.connection = connection
+
+    if (client) {
+      FakeDriver.client = client
+      FakeDriver.isConnected = true
     }
+
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore
+    return FakeDriver
+  }
+
+  public static queueName = 'fake'
+  public static deadletter = 'fake-deadletter'
+  public static isConnected = false
+  public static isSavedOnFactory = false
+  public static connection = 'fake'
+  public static client: unknown = null
+
+  /**
+   * Clone the driver instance.
+   */
+  public static clone() {
+    return Json.copy(FakeDriver)
+  }
+
+  /**
+   * Return the client of driver.
+   */
+  public static getClient() {
+    return this.client
+  }
+
+  /**
+   * Set a client in driver.
+   */
+  public static setClient(client: unknown) {
+    this.client = client
+
+    return this
   }
 
   /**
@@ -27,7 +63,7 @@ export class VanillaDriver extends Driver {
    * Queue.connection('my-con').connect()
    * ```
    */
-  public connect(options: ConnectionOptions = {}): void {
+  public static connect(options: ConnectionOptions = {}): void {
     options = Options.create(options, {
       force: false,
       saveOnFactory: true,
@@ -42,7 +78,6 @@ export class VanillaDriver extends Driver {
       return
     }
 
-    this.client = { queues: {} }
     this.isConnected = true
     this.isSavedOnFactory = options.saveOnFactory
   }
@@ -55,7 +90,7 @@ export class VanillaDriver extends Driver {
    * await Queue.connection('my-con').close()
    * ```
    */
-  public async close(): Promise<void> {
+  public static async close(): Promise<void> {
     if (!this.isConnected) {
       return
     }
@@ -71,11 +106,7 @@ export class VanillaDriver extends Driver {
    * await Queue.truncate()
    * ```
    */
-  public async truncate() {
-    Object.keys(this.client.queues).forEach(
-      key => (this.client.queues[key] = [])
-    )
-  }
+  public static async truncate() {}
 
   /**
    * Define which queue is going to be used to
@@ -87,10 +118,34 @@ export class VanillaDriver extends Driver {
    * await Queue.queue('mail').add({ email: 'lenon@athenna.io' })
    * ```
    */
-  public async add(item: unknown) {
-    this.defineQueue()
+  public static queue(name: string) {
+    this.queueName = name
 
-    this.client.queues[this.queueName].push(item)
+    return this
+  }
+
+  /**
+   * Add a new item to the queue.
+   *
+   * @example
+   * ```ts
+   * await Queue.add({ name: 'lenon' })
+   * ```
+   */
+  public static async add() {}
+
+  /**
+   * Remove an item from the queue and return.
+   *
+   * @example
+   * ```ts
+   * await Queue.add({ name: 'lenon' })
+   *
+   * const user = await Queue.pop()
+   * ```
+   */
+  public static async pop(): Promise<any> {
+    return {}
   }
 
   /**
@@ -103,34 +158,8 @@ export class VanillaDriver extends Driver {
    * const user = await Queue.pop()
    * ```
    */
-  public async pop() {
-    this.defineQueue()
-
-    if (!this.client.queues[this.queueName].length) {
-      return null
-    }
-
-    return this.client.queues[this.queueName].shift()
-  }
-
-  /**
-   * Remove an item from the queue and return.
-   *
-   * @example
-   * ```ts
-   * await Queue.add({ name: 'lenon' })
-   *
-   * const user = await Queue.pop()
-   * ```
-   */
-  public async peek() {
-    this.defineQueue()
-
-    if (!this.client.queues[this.queueName].length) {
-      return null
-    }
-
-    return this.client.queues[this.queueName][0]
+  public static async peek(): Promise<any> {
+    return {}
   }
 
   /**
@@ -143,10 +172,10 @@ export class VanillaDriver extends Driver {
    * const length = await Queue.length()
    * ```
    */
-  public async length() {
-    this.defineQueue()
-
-    return this.client.queues[this.queueName].length
+  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+  // @ts-ignore
+  public static async length() {
+    return 0
   }
 
   /**
@@ -158,10 +187,8 @@ export class VanillaDriver extends Driver {
    * }
    * ```
    */
-  public async isEmpty() {
-    this.defineQueue()
-
-    return !this.client.queues[this.queueName].length
+  public static async isEmpty() {
+    return true
   }
 
   /**
@@ -176,7 +203,9 @@ export class VanillaDriver extends Driver {
    * })
    * ```
    */
-  public async process(processor: (item: unknown) => any | Promise<any>) {
+  public static async process(
+    processor: (item: unknown) => any | Promise<any>
+  ) {
     const data = await this.pop()
 
     try {
@@ -187,8 +216,6 @@ export class VanillaDriver extends Driver {
         this.queueName,
         err
       )
-
-      this.client.queues[this.deadletter].push({ queue: this.queueName, data })
     }
   }
 }

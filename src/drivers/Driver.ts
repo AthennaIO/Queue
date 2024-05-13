@@ -7,6 +7,9 @@
  * file that was distributed with this source code.
  */
 
+import { Config } from '@athenna/config'
+import type { ConnectionOptions } from '#src/types'
+
 export abstract class Driver<Client = any> {
   /**
    * Set if this instance is connected.
@@ -80,9 +83,9 @@ export abstract class Driver<Client = any> {
   }
 
   /**
-   * Connect to database.
+   * Connect to client.
    */
-  public abstract connect(options?: any): void
+  public abstract connect(options?: ConnectionOptions): void
 
   /**
    * Close the connection with the client in this instance.

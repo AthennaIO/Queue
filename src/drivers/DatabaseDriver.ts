@@ -7,42 +7,69 @@
  * file that was distributed with this source code.
  */
 
-import { debug } from '#src/debug'
+import { Log } from '@athenna/logger'
 import { Config } from '@athenna/config'
 import { Driver } from '#src/drivers/Driver'
 import type { DatabaseImpl } from '@athenna/database'
 
 export class DatabaseDriver extends Driver {
-  private DB: DatabaseImpl
-  private dbConnection: string
+  /**
+   * Database instance that will be used to save the
+   * queue data.
+   */
+  public DB: DatabaseImpl
 
-  private table: string
-  private deadLetterQueueName: string
+  /**
+   * The `connection` database that is being used.
+   */
+  public dbConnection: string
 
-  public constructor(connection: string, client: any = null) {
-    super(connection, client)
+  /**
+   * The table responsible to save the data and queues.
+   */
+  public table: string
 
-    const {
-      table,
-      queue,
-      deadletter,
-      connection: dbConnection
-    } = Config.get(`queue.connections.${connection}`)
+  public constructor(con: string, client: any = null) {
+    super(con, client)
+
+    const { table, connection } = Config.get(`queue.connections.${con}`)
 
     this.table = table
-    this.queueName = queue
-    this.dbConnection = dbConnection
-    this.deadLetterQueueName = deadletter
+    this.dbConnection = connection
   }
 
+  /**
+   * Delete all the data of queues.
+   *
+   * @example
+   * ```ts
+   * await Queue.truncate()
+   * ```
+   */
   public async truncate() {
     await this.DB.truncate(this.table)
   }
 
+  /**
+   * Connect to client.
+   *
+   * @example
+   * ```ts
+   * Queue.connection('my-con').connect()
+   * ```
+   */
   public async connect() {
     this.DB = ioc.safeUse('Athenna/Core/Database').connection(this.dbConnection)
   }
 
+  /**
+   * Close the connection with queue in this instance.
+   *
+   * @example
+   * ```ts
+   * await Queue.connection('my-con').close()
+   * ```
+   */
   public async close() {
     if (!this.DB) {
       return
@@ -51,6 +78,16 @@ export class DatabaseDriver extends Driver {
     await this.DB.close()
   }
 
+  /**
+   * Define which queue is going to be used to
+   * perform operations. If not defined, the default
+   * set on the connection configuration will be used.
+   *
+   * @example
+   * ```ts
+   * await Queue.queue('mail').add({ email: 'lenon@athenna.io' })
+   * ```
+   */
   public async add(item: unknown) {
     await this.DB.table(this.table).create({
       queue: this.queueName,
@@ -58,28 +95,45 @@ export class DatabaseDriver extends Driver {
     })
   }
 
+  /**
+   * Remove an item from the queue and return.
+   *
+   * @example
+   * ```ts
+   * await Queue.add({ name: 'lenon' })
+   *
+   * const user = await Queue.pop()
+   * ```
+   */
   public async pop() {
     const data = await this.DB.table(this.table)
       .where('queue', this.queueName)
-      .orderBy('id', 'DESC')
+      .latest()
       .find()
 
     if (!data) {
       return
     }
 
-    await this.DB.table(this.table)
-      .where('id', data.id)
-      .where('queue', this.queueName)
-      .delete()
+    await this.DB.table(this.table).where('id', data.id).delete()
 
     return data.item
   }
 
+  /**
+   * Remove an item from the queue and return.
+   *
+   * @example
+   * ```ts
+   * await Queue.add({ name: 'lenon' })
+   *
+   * const user = await Queue.pop()
+   * ```
+   */
   public async peek() {
     const data = await this.DB.table(this.table)
       .where('queue', this.queueName)
-      .orderBy('id', 'DESC')
+      .latest()
       .find()
 
     if (!data) {
@@ -89,6 +143,16 @@ export class DatabaseDriver extends Driver {
     return data.item
   }
 
+  /**
+   * Return how many items are defined inside the queue.
+   *
+   * @example
+   * ```ts
+   * await Queue.add({ name: 'lenon' })
+   *
+   * const length = await Queue.length()
+   * ```
+   */
   public async length() {
     const count = await this.DB.table(this.table)
       .where('queue', this.queueName)
@@ -97,6 +161,15 @@ export class DatabaseDriver extends Driver {
     return parseInt(count)
   }
 
+  /**
+   * Verify if there are items on the queue.
+   *
+   * @example
+   * ```ts
+   * if (await Queue.isEmpty()) {
+   * }
+   * ```
+   */
   public async isEmpty() {
     const count = await this.DB.table(this.table)
       .where('queue', this.queueName)
@@ -105,20 +178,32 @@ export class DatabaseDriver extends Driver {
     return parseInt(count) <= 0
   }
 
+  /**
+   * Process the next item of the queue with a handler.
+   *
+   * @example
+   * ```ts
+   * await Queue.add({ email: 'lenon@athenna.io' })
+   *
+   * await Queue.process(async (user) => {
+   *   await Mail.to(user.email).subject('Hello!').send()
+   * })
+   * ```
+   */
   public async process(processor: (item: unknown) => any | Promise<any>) {
     const data = await this.pop()
 
     try {
       await processor(data)
     } catch (err) {
-      debug(
+      Log.channelOrVanilla('application').error(
         'adding data of %s to deadletter queue due to: %o',
         this.queueName,
         err
       )
 
       await this.DB.table(this.table).create({
-        queue: this.deadLetterQueueName,
+        queue: this.deadletter,
         formerQueue: this.queueName,
         item: data
       })

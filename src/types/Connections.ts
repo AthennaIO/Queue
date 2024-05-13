@@ -7,6 +7,4 @@
  * file that was distributed with this source code.
  */
 
-export * from '#src/types/DriverKey'
-export * from '#src/types/Connections'
-export * from '#src/types/ConnectionOptions'
+export type Connections = 'fake' | 'vanilla' | 'database' | string

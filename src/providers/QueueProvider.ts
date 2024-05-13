@@ -8,5 +8,11 @@
  */
 
 import { ServiceProvider } from '@athenna/ioc'
+import { QueueImpl } from '#src/queue/QueueImpl'
 
-export class QueueProvider extends ServiceProvider {}
+export class QueueProvider extends ServiceProvider {
+  public async register() {
+    this.container.instance('athennaQueueOpts', undefined)
+    this.container.transient('Athenna/Core/Queue', QueueImpl)
+  }
+}

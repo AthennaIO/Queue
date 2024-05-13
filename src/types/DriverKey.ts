@@ -7,6 +7,9 @@
  * file that was distributed with this source code.
  */
 
-export * from '#src/types/DriverKey'
-export * from '#src/types/Connections'
-export * from '#src/types/ConnectionOptions'
+import type { Driver } from '#src/drivers/Driver'
+
+export type DriverKey = {
+  Driver: new (...args: any[]) => Driver
+  client?: any
+}
