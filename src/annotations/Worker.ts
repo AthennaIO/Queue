@@ -12,15 +12,15 @@ import 'reflect-metadata'
 import { debug } from '#src/debug'
 import { Options } from '@athenna/common'
 import { Annotation } from '@athenna/ioc'
-import type { JobOptions } from '#src/types/JobOptions'
+import type { WorkerOptions } from '#src/types'
 
 /**
- * Create a job inside the service provider.
+ * Create a worker inside the service provider.
  */
-export function Job(options?: JobOptions): ClassDecorator {
+export function Worker(options?: WorkerOptions): ClassDecorator {
   return (target: any) => {
     options = Options.create(options, {
-      alias: `App/Jobs/${target.name}`,
+      alias: `App/Workers/${target.name}`,
       type: 'transient'
     })
 

@@ -7,4 +7,11 @@
  * file that was distributed with this source code.
  */
 
-export type Connections = 'fake' | 'vanilla' | 'database' | string
+import { Worker, BaseWorker } from '#src'
+
+@Worker()
+export class MailWorker extends BaseWorker {
+  public async handle(data: unknown) {
+    console.log(data)
+  }
+}

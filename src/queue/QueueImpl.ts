@@ -7,32 +7,28 @@
  * file that was distributed with this source code.
  */
 
+import type { ConnectionOptions } from '#src/types'
 import type { FakeDriver } from '#src/drivers/FakeDriver'
-import { DriverFactory } from '#src/factories/DriverFactory'
 import type { Driver as DriverImpl } from '#src/drivers/Driver'
 import type { VanillaDriver } from '#src/drivers/VanillaDriver'
-import type { ConnectionOptions, Connections } from '#src/types'
 import type { DatabaseDriver } from '#src/drivers/DatabaseDriver'
+import { ConnectionFactory } from '#src/factories/ConnectionFactory'
 
 export class QueueImpl<Driver extends DriverImpl = any> {
   /**
    * The connection name used for this instance.
    */
-  public connectionName = Config.get<Connections>('queue.default')
+  public connectionName = Config.get('queue.default')
 
   /**
    * The drivers responsible for handling queue operations.
    */
-  public driver: Driver = null
+  public driver: VanillaDriver | DatabaseDriver | typeof FakeDriver = null
 
   /**
    * Creates a new instance of QueueImpl.
    */
   public constructor(athennaQueueOpts?: ConnectionOptions) {
-    this.driver = DriverFactory.fabricate(
-      this.connectionName
-    ) as unknown as Driver
-
     this.connect(athennaQueueOpts)
   }
 
@@ -52,7 +48,7 @@ export class QueueImpl<Driver extends DriverImpl = any> {
   ): QueueImpl<typeof FakeDriver>
 
   public connection(
-    con: Connections,
+    con: 'fake' | 'vanilla' | 'database' | string,
     options?: ConnectionOptions
   ):
     | QueueImpl<VanillaDriver>
@@ -67,8 +63,11 @@ export class QueueImpl<Driver extends DriverImpl = any> {
    * await Queue.connection('redis').queue('hello').add({ name: 'lenon' })
    * ```
    */
-  public connection(con: Connections, options?: ConnectionOptions) {
-    const driver = DriverFactory.fabricate(con)
+  public connection(
+    con: 'fake' | 'vanilla' | 'database' | string,
+    options?: ConnectionOptions
+  ): QueueImpl<Driver> {
+    const driver = ConnectionFactory.fabricate(con)
     const queue = new QueueImpl<typeof driver>(options)
 
     queue.connectionName = con
@@ -108,6 +107,25 @@ export class QueueImpl<Driver extends DriverImpl = any> {
    */
   public async close(): Promise<void> {
     await this.driver.close()
+  }
+
+  /**
+   * Close all the open connections of queue.
+   *
+   * @example
+   * ```ts
+   * await Queue.closeAll()
+   * ```
+   */
+  public async closeAll(): Promise<void> {
+    const cons = ConnectionFactory.availableConnections()
+    const promises = cons.map(con => {
+      const driver = ConnectionFactory.fabricate(con)
+
+      return driver.close()
+    })
+
+    await Promise.all(promises)
   }
 
   /**

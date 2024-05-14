@@ -7,27 +7,27 @@
  * file that was distributed with this source code.
  */
 
-export type JobOptions = {
+export type WorkerOptions = {
   /**
-   * The alias that will be used to register the job inside
+   * The alias that will be used to register the worker inside
    * the service container.
    *
-   * @default App/Jobs/YourJobClassName
+   * @default App/Worker/YourJobClassName
    */
   alias?: string
 
   /**
    * The camel alias that will be used as an alias of the real
-   * job alias. Camel alias is important when you want to
+   * worker alias. Camel alias is important when you want to
    * work with constructor injection. By default, Athenna doesn't
-   * create camel alias for jobs.
+   * create camel alias for workers.
    *
    * @default undefined
    */
   camelAlias?: string
 
   /**
-   * The registration type that will be used to register your job
+   * The registration type that will be used to register your worker
    * inside the service container.
    *
    * @default 'transient'

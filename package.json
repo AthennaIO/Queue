@@ -37,7 +37,10 @@
     "./types": "./src/types/index.js",
     "./package": "./package.json",
     "./package.json": "./package.json",
-    "./testing/plugins": "./src/testing/plugins/index.js"
+    "./testing/plugins": "./src/testing/plugins/index.js",
+    "./providers/QueueProvider": "./src/providers/QueueProvider.js",
+    "./providers/WorkerProvider": "./src/providers/WorkerProvider.js",
+    "./commands/MakeWorkerCommand": "./src/commands/MakeWorkerCommand.js"
   },
   "imports": {
     "#bin/*": "./bin/*.js",
@@ -50,6 +53,7 @@
     "#tests": "./tests/index.js"
   },
   "devDependencies": {
+    "@athenna/artisan": "^4.42.0",
     "@athenna/common": "^4.39.0",
     "@athenna/config": "^4.21.0",
     "@athenna/database": "^4.52.0",

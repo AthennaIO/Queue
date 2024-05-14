@@ -1,0 +1,6 @@
+import { Worker, BaseWorker } from '@athenna/queue'
+
+@Worker()
+export class {{ namePascal }} extends BaseWorker {
+  public async handle(data: unknown): Promise<void> {}
+}

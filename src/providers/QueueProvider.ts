@@ -15,4 +15,14 @@ export class QueueProvider extends ServiceProvider {
     this.container.instance('athennaQueueOpts', undefined)
     this.container.transient('Athenna/Core/Queue', QueueImpl)
   }
+
+  public async shutdown() {
+    const queue = this.container.use('Athenna/Core/Queue')
+
+    if (!queue) {
+      return
+    }
+
+    await queue.closeAll()
+  }
 }
