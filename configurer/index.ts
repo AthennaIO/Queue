@@ -7,8 +7,8 @@
  * file that was distributed with this source code.
  */
 
-import { BaseConfigurer } from '@athenna/artisan'
 import { File, Path } from '@athenna/common'
+import { BaseConfigurer } from '@athenna/artisan'
 
 export default class QueueConfigurer extends BaseConfigurer {
   public async configure() {

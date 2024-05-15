@@ -66,6 +66,8 @@ export class BaseWorker {
    * @example
    * ```ts
    * const queue = Queue.connection(Job.connection()).queue(Job.queue())
+   *
+   * await queue.add({ hello: 'world' })
    * ```
    */
   public queue() {
