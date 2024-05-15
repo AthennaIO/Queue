@@ -29,6 +29,8 @@ export class QueueImpl<Driver extends DriverImpl = any> {
    * Creates a new instance of QueueImpl.
    */
   public constructor(athennaQueueOpts?: ConnectionOptions) {
+    this.driver = ConnectionFactory.fabricate(this.connectionName)
+
     this.connect(athennaQueueOpts)
   }
 
@@ -122,7 +124,9 @@ export class QueueImpl<Driver extends DriverImpl = any> {
     const promises = cons.map(con => {
       const driver = ConnectionFactory.fabricate(con)
 
-      return driver.close()
+      return driver
+        .close()
+        .then(() => ConnectionFactory.connections.delete(con))
     })
 
     await Promise.all(promises)
