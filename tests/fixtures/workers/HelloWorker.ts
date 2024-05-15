@@ -7,10 +7,9 @@
  * file that was distributed with this source code.
  */
 
-import { Worker, BaseWorker } from '#src'
+import { BaseWorker } from '#src/workers/BaseWorker'
 
-@Worker()
-export class MailWorker extends BaseWorker {
+export class HelloWorker extends BaseWorker {
   public async handle(data: unknown) {
     console.log(data)
   }
