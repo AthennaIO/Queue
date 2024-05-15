@@ -11,9 +11,9 @@ import { Log } from '@athenna/logger'
 import { Config } from '@athenna/config'
 import { Is, Options } from '@athenna/common'
 import { Driver } from '#src/drivers/Driver'
+import type { ConnectionOptions } from '#src/types'
 import type { DatabaseImpl } from '@athenna/database'
 import { ConnectionFactory } from '#src/factories/ConnectionFactory'
-import type { ConnectionOptions } from '#src/types/ConnectionOptions'
 
 export class DatabaseDriver extends Driver<DatabaseImpl> {
   /**
