@@ -129,7 +129,7 @@ export class FakeDriver {
   }
 
   /**
-   * Add a new item to the queue.
+   * Add a new job to the queue.
    *
    * @example
    * ```ts
@@ -139,7 +139,7 @@ export class FakeDriver {
   public static async add() {}
 
   /**
-   * Remove an item from the queue and return.
+   * Remove an job from the queue and return.
    *
    * @example
    * ```ts
@@ -153,7 +153,7 @@ export class FakeDriver {
   }
 
   /**
-   * Remove an item from the queue and return.
+   * Remove an job from the queue and return.
    *
    * @example
    * ```ts
@@ -167,7 +167,7 @@ export class FakeDriver {
   }
 
   /**
-   * Return how many items are defined inside the queue.
+   * Return how many jobs are defined inside the queue.
    *
    * @example
    * ```ts
@@ -183,7 +183,7 @@ export class FakeDriver {
   }
 
   /**
-   * Verify if there are items on the queue.
+   * Verify if there are jobs on the queue.
    *
    * @example
    * ```ts
@@ -196,7 +196,7 @@ export class FakeDriver {
   }
 
   /**
-   * Process the next item of the queue with a handler.
+   * Process the next job of the queue with a handler.
    *
    * @example
    * ```ts
@@ -208,18 +208,20 @@ export class FakeDriver {
    * ```
    */
   public static async process(
-    processor: (item: unknown) => any | Promise<any>
+    processor: (data: unknown) => any | Promise<any>
   ) {
     const data = await this.pop()
 
     try {
       await processor(data)
     } catch (err) {
-      Log.channelOrVanilla('application').error(
-        'adding data of %s to deadletter queue due to: %o',
-        this.queueName,
-        err
-      )
+      if (Config.is('rc.bootLogs', true)) {
+        Log.channelOrVanilla('application').error(
+          'adding data of %s to deadletter queue due to: %o',
+          this.queueName,
+          err
+        )
+      }
     }
   }
 }

@@ -108,23 +108,23 @@ export abstract class Driver<Client = any> {
   }
 
   /**
-   * Add a item to the queue.
+   * Add a job to the queue.
    */
-  public abstract add(item: unknown): Promise<void>
+  public abstract add(data: unknown): Promise<void>
 
   /**
-   * Remove the first item from the queue and return.
+   * Remove the first job from the queue and return.
    */
   public abstract pop<T = any>(): Promise<T>
 
   /**
-   * Get the first item from the queue without removing
+   * Get the first job from the queue without removing
    * and return.
    */
   public abstract peek<T = any>(): Promise<T>
 
   /**
-   * Return the length of items inside the queue.
+   * Return the length of jobs inside the queue.
    */
   public abstract length(): Promise<number>
 
@@ -134,9 +134,9 @@ export abstract class Driver<Client = any> {
   public abstract isEmpty(): Promise<boolean>
 
   /**
-   * Process the next item in the queue.
+   * Process the next data in the queue.
    */
   public abstract process(
-    processor: (item: unknown) => any | Promise<any>
+    processor: (data: unknown) => any | Promise<any>
   ): Promise<void>
 }

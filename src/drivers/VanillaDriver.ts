@@ -98,14 +98,14 @@ export class VanillaDriver extends Driver {
    * await Queue.queue('mail').add({ email: 'lenon@athenna.io' })
    * ```
    */
-  public async add(item: unknown) {
+  public async add(data: unknown) {
     this.defineQueue()
 
-    this.client.queues[this.queueName].push(item)
+    this.client.queues[this.queueName].push(data)
   }
 
   /**
-   * Remove an item from the queue and return.
+   * Remove an job from the queue and return.
    *
    * @example
    * ```ts
@@ -125,7 +125,7 @@ export class VanillaDriver extends Driver {
   }
 
   /**
-   * Remove an item from the queue and return.
+   * Remove an job from the queue and return.
    *
    * @example
    * ```ts
@@ -145,7 +145,7 @@ export class VanillaDriver extends Driver {
   }
 
   /**
-   * Return how many items are defined inside the queue.
+   * Return how many jobs are defined inside the queue.
    *
    * @example
    * ```ts
@@ -161,7 +161,7 @@ export class VanillaDriver extends Driver {
   }
 
   /**
-   * Verify if there are items on the queue.
+   * Verify if there are jobs on the queue.
    *
    * @example
    * ```ts
@@ -176,7 +176,7 @@ export class VanillaDriver extends Driver {
   }
 
   /**
-   * Process the next item of the queue with a handler.
+   * Process the next job of the queue with a handler.
    *
    * @example
    * ```ts
@@ -187,17 +187,19 @@ export class VanillaDriver extends Driver {
    * })
    * ```
    */
-  public async process(processor: (item: unknown) => any | Promise<any>) {
+  public async process(processor: (data: unknown) => any | Promise<any>) {
     const data = await this.pop()
 
     try {
       await processor(data)
     } catch (err) {
-      Log.channelOrVanilla('application').error(
-        'adding data of %s to deadletter queue due to: %o',
-        this.queueName,
-        err
-      )
+      if (Config.is('rc.bootLogs', true)) {
+        Log.channelOrVanilla('application').error(
+          'adding data of %s to deadletter queue due to: %o',
+          this.queueName,
+          err
+        )
+      }
 
       this.client.queues[this.deadletter].push({ queue: this.queueName, data })
     }
