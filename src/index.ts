@@ -13,6 +13,7 @@ export * from '#src/annotations/Worker'
 
 export * from '#src/queue/QueueImpl'
 export * from '#src/drivers/Driver'
+export * from '#src/drivers/FakeDriver'
 export * from '#src/drivers/VanillaDriver'
 export * from '#src/drivers/DatabaseDriver'
 export * from '#src/factories/ConnectionFactory'

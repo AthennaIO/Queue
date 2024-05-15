@@ -65,6 +65,57 @@ export class ConnectionFactory {
   }
 
   /**
+   * Verify if client is present on a driver connection.
+   */
+  public static hasClient(con: string): boolean {
+    return !!this.connections.get(con).client
+  }
+
+  /**
+   * Get client of a connection.
+   */
+  public static getClient(con: string): any {
+    return this.connections.get(con).client
+  }
+
+  /**
+   * Set connection client on driver.
+   */
+  public static setClient(con: string, client: any): void {
+    const connection = this.connections.get(con) || {}
+
+    connection.client = client
+
+    this.connections.set(con, connection)
+  }
+
+  /**
+   * Return all available drivers.
+   */
+  public static availableDrivers() {
+    const availableDrivers = []
+
+    for (const key of this.drivers.keys()) {
+      availableDrivers.push(key)
+    }
+
+    return availableDrivers
+  }
+
+  /**
+   * Return all available connections.
+   */
+  public static availableConnections() {
+    const availableConnections = []
+
+    for (const key of this.connections.keys()) {
+      availableConnections.push(key)
+    }
+
+    return availableConnections
+  }
+
+  /**
    * Parse connection config name if is default
    */
   private static parseConName(con: string): string {
@@ -90,56 +141,5 @@ export class ConnectionFactory {
     }
 
     return config.driver
-  }
-
-  /**
-   * Verify if client is present on a driver connection.
-   */
-  public static hasClient(con: string): boolean {
-    return !!this.connections.get(con).client
-  }
-
-  /**
-   * Get client of a connection.
-   */
-  public static getClient(con: string): any {
-    return this.connections.get(con).client
-  }
-
-  /**
-   * Set connection client on driver.
-   */
-  public static setClient(con: string, client: any): void {
-    const connection = this.connections.get(con)
-
-    connection.client = client
-
-    this.connections.set(con, connection)
-  }
-
-  /**
-   * Return all available drivers.
-   */
-  public static availableDrivers() {
-    const availableDrivers = []
-
-    for (const key of this.connections.keys()) {
-      availableDrivers.push(key)
-    }
-
-    return availableDrivers
-  }
-
-  /**
-   * Return all available connections.
-   */
-  public static availableConnections() {
-    const availableConnections = []
-
-    for (const key of this.connections.keys()) {
-      availableConnections.push(key)
-    }
-
-    return availableConnections
   }
 }
