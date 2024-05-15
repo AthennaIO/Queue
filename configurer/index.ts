@@ -7,6 +7,7 @@
  * file that was distributed with this source code.
  */
 
+import { View } from '@athenna/view'
 import { File, Path } from '@athenna/common'
 import { BaseConfigurer } from '@athenna/artisan'
 
@@ -44,6 +45,29 @@ export default class QueueConfigurer extends BaseConfigurer {
         .pushTo('providers', '@athenna/queue/providers/WorkerProvider')
         .save()
     })
+
+    const willUseDatabaseDriver = this.prompt.confirm(
+      'Are you going to use the ({yellow} "database") driver with a SQL database? Confirm it to create the ({yellow} "jobs migration").'
+    )
+
+    if (willUseDatabaseDriver) {
+      task.addPromise('Create jobs migration', async () => {
+        const content = await View.renderRawByPath('./migration.edge', {
+          tableName: 'jobs',
+          namePascal: 'CreateJobsTable'
+        })
+
+        let [date, time] = new Date().toISOString().split('T')
+
+        date = date.replace(/-/g, '_')
+        time = time.split('.')[0].replace(/:/g, '')
+
+        await new File(
+          Path.migrations(`${date}_${time}_create_jobs_table.${Path.ext()}`),
+          content
+        ).load()
+      })
+    }
 
     await task.run()
 

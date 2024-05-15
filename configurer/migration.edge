@@ -1,0 +1,19 @@
+import { BaseMigration, type DatabaseImpl } from '@athenna/database'
+
+export class {{ namePascal }} extends BaseMigration {
+  public tableName = {{ tableName }}
+
+  public async up(db: DatabaseImpl) {
+    return db.createTable(this.tableName, builder => {
+      builder.increments('id')
+      builder.string('queue').notNullable()
+      builder.string('formerQueue').nullable()
+      builder.string('data').notNullable()
+      builder.timestamps(true, true, true)
+    })
+  }
+
+  public async down(db: DatabaseImpl) {
+    return db.dropTable(this.tableName)
+  }
+}
