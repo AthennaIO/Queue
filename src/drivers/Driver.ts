@@ -54,6 +54,7 @@ export abstract class Driver<Client = any> {
     if (client) {
       this.client = client
       this.isConnected = true
+      this.isSavedOnFactory = true
     }
   }
 
