@@ -11,11 +11,16 @@ import { Log } from '@athenna/logger'
 import { Options } from '@athenna/common'
 import { Driver } from '#src/drivers/Driver'
 import type { ConnectionOptions } from '#src/types'
+import { ConnectionFactory } from '#src/factories/ConnectionFactory'
 
 export class VanillaDriver extends Driver {
   private defineQueue() {
     if (!this.client.queues[this.queueName]) {
       this.client.queues[this.queueName] = []
+    }
+
+    if (!this.client.queues[this.deadletter]) {
+      this.client.queues[this.deadletter] = []
     }
   }
 
@@ -30,8 +35,8 @@ export class VanillaDriver extends Driver {
   public connect(options: ConnectionOptions = {}): void {
     options = Options.create(options, {
       force: false,
-      saveOnFactory: true,
-      connect: true
+      connect: true,
+      saveOnFactory: true
     })
 
     if (!options.connect) {
@@ -45,6 +50,10 @@ export class VanillaDriver extends Driver {
     this.client = { queues: {} }
     this.isConnected = true
     this.isSavedOnFactory = options.saveOnFactory
+
+    if (options.saveOnFactory) {
+      ConnectionFactory.setClient(this.connection, this.client)
+    }
   }
 
   /**
@@ -61,6 +70,8 @@ export class VanillaDriver extends Driver {
     }
 
     this.isConnected = false
+
+    ConnectionFactory.setClient(this.connection, null)
   }
 
   /**

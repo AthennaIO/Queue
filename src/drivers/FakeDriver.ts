@@ -10,6 +10,7 @@
 import { Log } from '@athenna/logger'
 import { Json, Options } from '@athenna/common'
 import type { ConnectionOptions } from '#src/types'
+import { ConnectionFactory } from '#src/factories/ConnectionFactory'
 
 export class FakeDriver {
   public constructor(connection?: string, client?: any) {
@@ -18,6 +19,7 @@ export class FakeDriver {
     if (client) {
       FakeDriver.client = client
       FakeDriver.isConnected = true
+      FakeDriver.isSavedOnFactory = true
     }
 
     // eslint-disable-next-line @typescript-eslint/ban-ts-comment
@@ -96,6 +98,8 @@ export class FakeDriver {
     }
 
     this.isConnected = false
+
+    ConnectionFactory.setClient(this.connection, null)
   }
 
   /**
