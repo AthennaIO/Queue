@@ -32,9 +32,11 @@ export class WorkerProvider extends ServiceProvider {
 
       const queueName = Worker.queue()
       const alias = `App/Workers/${Worker.name}`
-      const worker = this.container.transient(alias, Worker).use(alias)
+
+      this.container.transient(alias, Worker)
 
       const interval = setInterval(async () => {
+        const worker = this.container.use(alias)
         const queue = worker.queue()
 
         if (queue.isEmpty()) {
