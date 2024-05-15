@@ -43,23 +43,23 @@ export class ConnectionFactory {
 
     const driverName = this.getConnectionDriver(con)
     const Driver = this.drivers.get(driverName)
-    const { client } = this.connections.get(con)
+    const connection = this.connections.get(con)
 
-    if (client) {
+    if (!connection) {
+      this.connections.set(con, { client: null })
+
+      return new Driver(con)
+    }
+
+    if (connection.client) {
       debug(
         'client found for connection %s using driver %s, using it as default',
         con,
         driverName
       )
 
-      const impl = new Driver(con, client)
-
-      impl.isSavedOnFactory = true
-
-      return impl
+      return new Driver(con, connection.client)
     }
-
-    this.connections.set(con, { client })
 
     return new Driver(con)
   }
