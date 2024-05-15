@@ -9,16 +9,13 @@
 
 import { Log } from '@athenna/logger'
 import { Config } from '@athenna/config'
+import { Options } from '@athenna/common'
 import { Driver } from '#src/drivers/Driver'
 import type { DatabaseImpl } from '@athenna/database'
+import { ConnectionFactory } from '#src/factories/ConnectionFactory'
+import type { ConnectionOptions } from '#src/types/ConnectionOptions'
 
-export class DatabaseDriver extends Driver {
-  /**
-   * Database instance that will be used to save the
-   * queue data.
-   */
-  public DB: DatabaseImpl
-
+export class DatabaseDriver extends Driver<DatabaseImpl> {
   /**
    * The `connection` database that is being used.
    */
@@ -47,7 +44,7 @@ export class DatabaseDriver extends Driver {
    * ```
    */
   public async truncate() {
-    await this.DB.truncate(this.table)
+    await this.client.truncate(this.table)
   }
 
   /**
@@ -58,8 +55,30 @@ export class DatabaseDriver extends Driver {
    * Queue.connection('my-con').connect()
    * ```
    */
-  public async connect() {
-    this.DB = ioc.safeUse('Athenna/Core/Database').connection(this.dbConnection)
+  public async connect(options: ConnectionOptions = {}) {
+    options = Options.create(options, {
+      force: false,
+      connect: true,
+      saveOnFactory: true
+    })
+
+    if (!options.connect) {
+      return
+    }
+
+    if (this.isConnected && !options.force) {
+      return
+    }
+
+    this.client = ioc
+      .safeUse('Athenna/Core/Database')
+      .connection(this.dbConnection)
+    this.isConnected = true
+    this.isSavedOnFactory = options.saveOnFactory
+
+    if (this.isSavedOnFactory) {
+      ConnectionFactory.setClient(this.connection, this.client)
+    }
   }
 
   /**
@@ -71,11 +90,15 @@ export class DatabaseDriver extends Driver {
    * ```
    */
   public async close() {
-    if (!this.DB) {
+    if (!this.client || !this.isConnected) {
       return
     }
 
-    await this.DB.close()
+    await this.client.close()
+
+    this.client = null
+
+    ConnectionFactory.setClient(this.connection, null)
   }
 
   /**
@@ -89,7 +112,7 @@ export class DatabaseDriver extends Driver {
    * ```
    */
   public async add(item: unknown) {
-    await this.DB.table(this.table).create({
+    await this.client.table(this.table).create({
       queue: this.queueName,
       item
     })
@@ -106,7 +129,8 @@ export class DatabaseDriver extends Driver {
    * ```
    */
   public async pop() {
-    const data = await this.DB.table(this.table)
+    const data = await this.client
+      .table(this.table)
       .where('queue', this.queueName)
       .latest()
       .find()
@@ -115,7 +139,7 @@ export class DatabaseDriver extends Driver {
       return
     }
 
-    await this.DB.table(this.table).where('id', data.id).delete()
+    await this.client.table(this.table).where('id', data.id).delete()
 
     return data.item
   }
@@ -131,7 +155,8 @@ export class DatabaseDriver extends Driver {
    * ```
    */
   public async peek() {
-    const data = await this.DB.table(this.table)
+    const data = await this.client
+      .table(this.table)
       .where('queue', this.queueName)
       .latest()
       .find()
@@ -154,7 +179,8 @@ export class DatabaseDriver extends Driver {
    * ```
    */
   public async length() {
-    const count = await this.DB.table(this.table)
+    const count = await this.client
+      .table(this.table)
       .where('queue', this.queueName)
       .count()
 
@@ -171,7 +197,8 @@ export class DatabaseDriver extends Driver {
    * ```
    */
   public async isEmpty() {
-    const count = await this.DB.table(this.table)
+    const count = await this.client
+      .table(this.table)
       .where('queue', this.queueName)
       .count()
 
@@ -202,7 +229,7 @@ export class DatabaseDriver extends Driver {
         err
       )
 
-      await this.DB.table(this.table).create({
+      await this.client.table(this.table).create({
         queue: this.deadletter,
         formerQueue: this.queueName,
         item: data
