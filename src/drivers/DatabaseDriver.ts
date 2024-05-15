@@ -9,7 +9,7 @@
 
 import { Log } from '@athenna/logger'
 import { Config } from '@athenna/config'
-import { Options } from '@athenna/common'
+import { Is, Options } from '@athenna/common'
 import { Driver } from '#src/drivers/Driver'
 import type { DatabaseImpl } from '@athenna/database'
 import { ConnectionFactory } from '#src/factories/ConnectionFactory'
@@ -97,29 +97,28 @@ export class DatabaseDriver extends Driver<DatabaseImpl> {
     await this.client.close()
 
     this.client = null
+    this.isConnected = false
 
     ConnectionFactory.setClient(this.connection, null)
   }
 
   /**
-   * Define which queue is going to be used to
-   * perform operations. If not defined, the default
-   * set on the connection configuration will be used.
+   * Add a new job to the queue.
    *
    * @example
    * ```ts
    * await Queue.queue('mail').add({ email: 'lenon@athenna.io' })
    * ```
    */
-  public async add(item: unknown) {
+  public async add(data: unknown) {
     await this.client.table(this.table).create({
       queue: this.queueName,
-      item
+      data
     })
   }
 
   /**
-   * Remove an item from the queue and return.
+   * Remove a job from the queue and return.
    *
    * @example
    * ```ts
@@ -139,13 +138,18 @@ export class DatabaseDriver extends Driver<DatabaseImpl> {
       return
     }
 
+    if (Is.Json(data.data)) {
+      data.data = JSON.parse(data.data)
+    }
+
     await this.client.table(this.table).where('id', data.id).delete()
 
-    return data.item
+    return data.data
   }
 
   /**
-   * Remove an item from the queue and return.
+   * Peek the next job from the queue without removing it
+   * and return.
    *
    * @example
    * ```ts
@@ -165,11 +169,15 @@ export class DatabaseDriver extends Driver<DatabaseImpl> {
       return null
     }
 
-    return data.item
+    if (Is.Json(data.data)) {
+      data.data = JSON.parse(data.data)
+    }
+
+    return data.data
   }
 
   /**
-   * Return how many items are defined inside the queue.
+   * Return how many jobs are defined inside the queue.
    *
    * @example
    * ```ts
@@ -188,7 +196,7 @@ export class DatabaseDriver extends Driver<DatabaseImpl> {
   }
 
   /**
-   * Verify if there are items on the queue.
+   * Verify if there are jobs on the queue.
    *
    * @example
    * ```ts
@@ -206,7 +214,7 @@ export class DatabaseDriver extends Driver<DatabaseImpl> {
   }
 
   /**
-   * Process the next item of the queue with a handler.
+   * Process the next job of the queue with a handler.
    *
    * @example
    * ```ts
@@ -217,22 +225,28 @@ export class DatabaseDriver extends Driver<DatabaseImpl> {
    * })
    * ```
    */
-  public async process(processor: (item: unknown) => any | Promise<any>) {
-    const data = await this.pop()
+  public async process(processor: (data: unknown) => any | Promise<any>) {
+    let data = await this.pop()
 
     try {
       await processor(data)
     } catch (err) {
-      Log.channelOrVanilla('application').error(
-        'adding data of %s to deadletter queue due to: %o',
-        this.queueName,
-        err
-      )
+      if (Config.is('rc.bootLogs', true)) {
+        Log.channelOrVanilla('application').error(
+          'adding data of %s to deadletter queue due to: %o',
+          this.queueName,
+          err
+        )
+      }
+
+      if (!Is.String(data)) {
+        data = JSON.stringify(data)
+      }
 
       await this.client.table(this.table).create({
         queue: this.deadletter,
         formerQueue: this.queueName,
-        item: data
+        data
       })
     }
   }

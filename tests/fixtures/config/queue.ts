@@ -1,3 +1,12 @@
+/**
+ * @athenna/queue
+ *
+ * (c) João Lenon <lenon@athenna.io>
+ *
+ * For the full copyright and license information, please view the LICENSE
+ * file that was distributed with this source code.
+ */
+
 import { Env } from '@athenna/config'
 
 export default {
@@ -38,7 +47,7 @@ export default {
     database: {
       driver: 'database',
       table: 'jobs',
-      connection: 'postgres',
+      connection: 'sqlite',
       queue: 'default',
       workerInterval: 1000,
       deadletter: 'deadletter'

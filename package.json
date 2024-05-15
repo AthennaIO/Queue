@@ -64,6 +64,7 @@
     "@athenna/view": "^4.22.0",
     "@typescript-eslint/eslint-plugin": "^6.7.4",
     "@typescript-eslint/parser": "^6.7.4",
+    "better-sqlite3": "^10.0.0",
     "commitizen": "^4.2.6",
     "cz-conventional-changelog": "^3.3.0",
     "eslint": "^8.36.0",
@@ -74,6 +75,7 @@
     "eslint-plugin-prettier": "^4.2.1",
     "eslint-plugin-promise": "^6.1.1",
     "husky": "^3.1.0",
+    "knex": "^3.1.0",
     "lint-staged": "^12.5.0",
     "prettier": "^2.8.7"
   },
