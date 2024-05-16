@@ -15,10 +15,10 @@ export class BaseWorker {
    * used by your worker class to process the data from
    * your queue.
    *
-   * @default 'default'
+   * @default Config.get('queue.default')
    */
   public static connection() {
-    return 'default'
+    return Config.get('queue.default')
   }
 
   /**

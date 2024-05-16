@@ -175,9 +175,9 @@
   "athenna": {
     "bootLogs": false,
     "workers": [
-      "#tests/fixtures/workers/AnnotatedValidator",
-      "#tests/fixtures/workers/HelloValidator",
-      "#tests/fixtures/workers/ProductValidator"
+      "#tests/fixtures/workers/AnnotatedWorker",
+      "#tests/fixtures/workers/HelloWorker",
+      "#tests/fixtures/workers/ProductWorker"
     ],
     "templates": {
       "worker": "./templates/worker.edge"

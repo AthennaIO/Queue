@@ -82,7 +82,7 @@ export class QueueImpl<Driver extends DriverImpl = any> {
    * Verify if client is already connected.
    */
   public isConnected(): boolean {
-    return this.driver.isConnected
+    return ConnectionFactory.hasClient(this.connectionName)
   }
 
   /**
@@ -124,9 +124,7 @@ export class QueueImpl<Driver extends DriverImpl = any> {
     const promises = cons.map(con => {
       const driver = ConnectionFactory.fabricate(con)
 
-      return driver
-        .close()
-        .then(() => ConnectionFactory.connections.delete(con))
+      return driver.close().then(() => ConnectionFactory.setClient(con, null))
     })
 
     await Promise.all(promises)

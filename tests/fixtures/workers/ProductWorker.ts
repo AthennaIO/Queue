@@ -8,10 +8,19 @@
  */
 
 import { Worker, BaseWorker } from '#src'
+import { PRODUCTS } from '#tests/fixtures/constants/products'
 
 @Worker()
 export class ProductWorker extends BaseWorker {
+  public static interval() {
+    return 100
+  }
+
+  public static queue() {
+    return 'products'
+  }
+
   public async handle(data: unknown) {
-    console.log(data)
+    PRODUCTS.push(data)
   }
 }

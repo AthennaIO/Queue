@@ -11,9 +11,20 @@ import { sep } from 'node:path'
 import { Log } from '@athenna/logger'
 import { Exec, Module, Path } from '@athenna/common'
 import { Annotation, ServiceProvider } from '@athenna/ioc'
+import type { BaseWorker } from '#src/workers/BaseWorker'
 
 export class WorkerProvider extends ServiceProvider {
+  /**
+   * Hold the intervals for each worker so when shutting
+   * down the application we can clear it.
+   */
   public intervals = []
+
+  /**
+   * Hold the workers classes and aliases to set up the
+   * intervals.
+   */
+  public workers: { alias: string; Worker: typeof BaseWorker }[] = []
 
   /**
    * Register the workers from `rc.workers` of `.athennarc.json`.
@@ -30,42 +41,44 @@ export class WorkerProvider extends ServiceProvider {
         return
       }
 
-      const queueName = Worker.queue()
       const alias = `App/Workers/${Worker.name}`
 
       this.container.transient(alias, Worker)
 
-      const interval = setInterval(async () => {
-        const worker = this.container.use(alias)
+      this.workers.push({ alias, Worker })
+    })
+
+    this.intervals = this.workers.map(({ alias, Worker }) => {
+      const queueName = Worker.queue()
+      const interval = Worker.interval()
+
+      return setInterval(async () => {
+        const worker = this.container.safeUse(alias)
         const queue = worker.queue()
 
-        if (queue.isEmpty()) {
+        if (await queue.isEmpty()) {
           return
         }
 
         if (Config.is('rc.bootLogs', true)) {
           Log.channelOrVanilla('application').info(
-            'Processing workers of %s queue',
+            'Processing jobs of %s queue',
             queueName
           )
         }
 
         await queue.process(worker.handle.bind(worker))
 
-        const jobs = queue.length()
+        const jobs = await queue.length()
 
-        if (jobs) {
-          if (Config.is('rc.bootLogs', true)) {
-            Log.channelOrVanilla('application').info(
-              'still has %n jobs to process on %s queue',
-              jobs,
-              queue
-            )
-          }
+        if (jobs && Config.is('rc.bootLogs', true)) {
+          Log.channelOrVanilla('application').info(
+            'still has %s jobs to process on %s queue',
+            jobs,
+            queueName
+          )
         }
-      }, Worker.interval())
-
-      this.intervals.push(interval)
+      }, interval)
     })
   }
 
@@ -79,10 +92,12 @@ export class WorkerProvider extends ServiceProvider {
   /**
    * Register the worker by the annotation metadata.
    */
-  public async registerWorkerByMeta(worker: unknown) {
-    const meta = Annotation.getMeta(worker)
+  public async registerWorkerByMeta(Worker: typeof BaseWorker) {
+    const meta = Annotation.getMeta(Worker)
 
-    this.container[meta.type](meta.alias, worker)
+    this.container[meta.type](meta.alias, Worker)
+
+    this.workers.push({ alias: meta.alias, Worker })
 
     if (meta.name) {
       this.container.alias(meta.name, meta.alias)
