@@ -9,7 +9,9 @@
 
 import { Path } from '@athenna/common'
 import { AfterEach, BeforeEach, Test, type Context } from '@athenna/test'
+import { NotFoundDriverException } from '#src/exceptions/NotFoundDriverException'
 import { ConnectionFactory, FakeDriver, DatabaseDriver, VanillaDriver } from '#src'
+import { NotImplementedConfigException } from '#src/exceptions/NotImplementedConfigException'
 
 export class ConnectionFactoryTest {
   @BeforeEach()
@@ -65,5 +67,15 @@ export class ConnectionFactoryTest {
     const driver = ConnectionFactory.fabricate('database')
 
     assert.instanceOf(driver, DatabaseDriver)
+  }
+
+  @Test()
+  public async shouldThrowNotFoundDriverExceptionWhenTryingToUseANotImplementedDriver({ assert }: Context) {
+    assert.throws(() => ConnectionFactory.fabricate('not-found'), NotFoundDriverException)
+  }
+
+  @Test()
+  public async shouldThrowNotImplementedConfigExceptionWhenTryingToUseANotImplementedDriver({ assert }: Context) {
+    assert.throws(() => ConnectionFactory.fabricate('not-found-con'), NotImplementedConfigException)
   }
 }

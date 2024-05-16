@@ -10,8 +10,8 @@
 import { Path } from '@athenna/common'
 import { Queue, QueueProvider } from '#src'
 import { LoggerProvider } from '@athenna/logger'
+import { Database, DatabaseImpl, DatabaseProvider } from '@athenna/database'
 import { Test, type Context, BeforeEach, AfterEach } from '@athenna/test'
-import { Database, DatabaseProvider } from '@athenna/database'
 
 export class DatabaseDriverTest {
   @BeforeEach()
@@ -54,6 +54,32 @@ export class DatabaseDriverTest {
     await queue.close()
 
     assert.isFalse(queue.isConnected())
+  }
+
+  @Test()
+  public async shouldBeAbleToCloneTheQueueInstance({ assert }: Context) {
+    const driver = Queue.connection('database').driver
+    const otherDriver = driver.clone()
+
+    driver.isConnected = false
+
+    assert.isTrue(otherDriver.isConnected)
+  }
+
+  @Test()
+  public async shouldBeAbleToGetDriverClient({ assert }: Context) {
+    const client = Queue.connection('database').driver.getClient()
+
+    assert.instanceOf(client, DatabaseImpl)
+  }
+
+  @Test()
+  public async shouldBeAbleToSetDifferentClientForDriver({ assert }: Context) {
+    const driver = Queue.connection('database').driver
+
+    driver.setClient({} as any)
+
+    assert.notInstanceOf(driver.client, DatabaseImpl)
   }
 
   @Test()
@@ -153,5 +179,18 @@ export class DatabaseDriverTest {
     const length = await queue.queue('deadletter').length()
 
     assert.deepEqual(length, 1)
+  }
+
+  @Test()
+  public async shouldBeAbleToTruncateAllJobs({ assert }: Context) {
+    const queue = Queue.connection('database')
+
+    await queue.add({ name: 'lenon' })
+
+    await queue.truncate()
+
+    const isEmpty = await queue.isEmpty()
+
+    assert.isTrue(isEmpty)
   }
 }

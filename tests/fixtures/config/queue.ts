@@ -59,6 +59,10 @@ export default {
 
     fake: {
       driver: 'fake'
+    },
+
+    'not-found': {
+      driver: 'not-found'
     }
   }
 }
