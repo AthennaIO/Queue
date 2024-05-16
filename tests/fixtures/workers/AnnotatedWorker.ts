@@ -1,5 +1,5 @@
 /**
- * @athenna/worker
+ * @athenna/queue
  *
  * (c) João Lenon <lenon@athenna.io>
  *

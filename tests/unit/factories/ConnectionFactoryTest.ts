@@ -8,6 +8,7 @@
  */
 
 import { Path } from '@athenna/common'
+import { TestDriver } from '#tests/fixtures/drivers/TestDriver'
 import { AfterEach, BeforeEach, Test, type Context } from '@athenna/test'
 import { NotFoundDriverException } from '#src/exceptions/NotFoundDriverException'
 import { ConnectionFactory, FakeDriver, DatabaseDriver, VanillaDriver } from '#src'
@@ -18,6 +19,7 @@ export class ConnectionFactoryTest {
   public async beforeEach() {
     await Config.loadAll(Path.fixtures('config'))
     ConnectionFactory.connections = new Map()
+    ConnectionFactory.drivers.delete('test')
   }
 
   @AfterEach()
@@ -77,5 +79,17 @@ export class ConnectionFactoryTest {
   @Test()
   public async shouldThrowNotImplementedConfigExceptionWhenTryingToUseANotImplementedDriver({ assert }: Context) {
     assert.throws(() => ConnectionFactory.fabricate('not-found-con'), NotImplementedConfigException)
+  }
+
+  @Test()
+  public async shouldBeAbleToCreateOwnDriverImplementationToUseWithinQueueFacade({ assert }: Context) {
+    ConnectionFactory.createDriver('test', TestDriver)
+
+    const testDriver = ConnectionFactory.fabricate('test')
+
+    assert.instanceOf(testDriver, TestDriver)
+
+    ConnectionFactory.drivers.delete('test')
+    ConnectionFactory.connections.delete('test')
   }
 }

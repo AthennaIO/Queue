@@ -63,6 +63,10 @@ export default {
 
     'not-found': {
       driver: 'not-found'
+    },
+
+    test: {
+      driver: 'test'
     }
   }
 }

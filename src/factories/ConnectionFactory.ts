@@ -8,6 +8,7 @@
  */
 
 import { debug } from '#src/debug'
+import type { Driver } from '#src/drivers/Driver'
 import { FakeDriver } from '#src/drivers/FakeDriver'
 import { VanillaDriver } from '#src/drivers/VanillaDriver'
 import { DatabaseDriver } from '#src/drivers/DatabaseDriver'
@@ -113,6 +114,23 @@ export class ConnectionFactory {
     }
 
     return availableConnections
+  }
+
+  /**
+   * Define your own queue driver implementation to use
+   * within Queue facade.
+   *
+   * @example
+   * ```ts
+   * import { Driver } from '@athenna/queue'
+   *
+   * class TestDriver extends Driver {}
+   *
+   * ConnectionFactory.createDriver('test', TestDriver)
+   * ```
+   */
+  public static createDriver(name: string, impl: typeof Driver) {
+    this.drivers.set(name, impl)
   }
 
   /**

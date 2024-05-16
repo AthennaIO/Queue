@@ -1,5 +1,5 @@
 /**
- * @athenna/validator
+ * @athenna/queue
  *
  * (c) João Lenon <lenon@athenna.io>
  *
