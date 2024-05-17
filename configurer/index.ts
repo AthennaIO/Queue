@@ -14,6 +14,27 @@ export default class QueueConfigurer extends BaseConfigurer {
   public async configure() {
     const task = this.logger.task()
 
+    const willUseDatabaseDriver = await this.prompt.confirm(
+      `Are you going to use the ${this.paint.yellow(
+        '"database"'
+      )} driver with a SQL database? Confirm it to create the ${this.paint.yellow(
+        '"jobs migration"'
+      )}.`
+    )
+
+    if (willUseDatabaseDriver) {
+      task.addPromise('Create jobs migration', async () => {
+        let [date, time] = new Date().toISOString().split('T')
+
+        date = date.replace(/-/g, '_')
+        time = time.split('.')[0].replace(/:/g, '')
+
+        return new File('./queue').copy(
+          Path.migrations(`${date}_${time}_create_jobs_table.${Path.ext()}`)
+        )
+      })
+    }
+
     task.addPromise(`Create queue.${Path.ext()} config file`, () => {
       return new File('./queue').copy(Path.config(`queue.${Path.ext()}`))
     })
@@ -44,27 +65,6 @@ export default class QueueConfigurer extends BaseConfigurer {
         .pushTo('providers', '@athenna/queue/providers/WorkerProvider')
         .save()
     })
-
-    const willUseDatabaseDriver = this.prompt.confirm(
-      `Are you going to use the ${this.paint.yellow(
-        '"database"'
-      )} driver with a SQL database? Confirm it to create the ${this.paint.yellow(
-        '"jobs migration"'
-      )}.`
-    )
-
-    if (willUseDatabaseDriver) {
-      task.addPromise('Create jobs migration', async () => {
-        let [date, time] = new Date().toISOString().split('T')
-
-        date = date.replace(/-/g, '_')
-        time = time.split('.')[0].replace(/:/g, '')
-
-        return new File('./queue').copy(
-          Path.migrations(`${date}_${time}_create_jobs_table.${Path.ext()}`)
-        )
-      })
-    }
 
     await task.run()
 
