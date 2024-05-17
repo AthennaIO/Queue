@@ -29,7 +29,7 @@ export default class QueueConfigurer extends BaseConfigurer {
         date = date.replace(/-/g, '_')
         time = time.split('.')[0].replace(/:/g, '')
 
-        return new File('./queue').copy(
+        return new File('./migration').copy(
           Path.migrations(`${date}_${time}_create_jobs_table.${Path.ext()}`)
         )
       })
