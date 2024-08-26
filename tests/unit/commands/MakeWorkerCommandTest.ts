@@ -19,12 +19,12 @@ export default class MakeWorkerCommandTest extends BaseCommandTest {
     output.assertSucceeded()
     output.assertLogged('[ MAKING WORKER ]')
     output.assertLogged('[  success  ] Worker "TestWorker" successfully created.')
-    output.assertLogged('[  success  ] Athenna RC updated: [ workers += "#app/workers/TestWorker" ]')
+    output.assertLogged('[  success  ] Athenna RC updated: [ workers += "#src/workers/TestWorker" ]')
 
     const { athenna } = await new File(Path.pwd('package.json')).getContentAsJson()
 
     assert.isTrue(await File.exists(Path.workers('TestWorker.ts')))
-    assert.containsSubset(athenna.workers, ['#app/workers/TestWorker'])
+    assert.containsSubset(athenna.workers, ['#src/workers/TestWorker'])
   }
 
   @Test()
