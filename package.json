@@ -1,6 +1,6 @@
 {
   "name": "@athenna/queue",
-  "version": "5.1.0",
+  "version": "5.2.0",
   "description": "The Athenna queue handler.",
   "license": "MIT",
   "author": "João Lenon <lenon@athenna.io>",
@@ -53,10 +53,10 @@
     "#tests": "./tests/index.js"
   },
   "devDependencies": {
-    "@athenna/artisan": "^5.0.0",
+    "@athenna/artisan": "^5.1.0",
     "@athenna/common": "^5.0.0",
     "@athenna/config": "^5.0.0",
-    "@athenna/database": "^5.1.0",
+    "@athenna/database": "^5.2.0",
     "@athenna/ioc": "^5.0.0",
     "@athenna/logger": "^5.0.0",
     "@athenna/test": "^5.0.0",
