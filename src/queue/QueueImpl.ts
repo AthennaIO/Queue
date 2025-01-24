@@ -7,6 +7,7 @@
  * file that was distributed with this source code.
  */
 
+import { Macroable } from '@athenna/common'
 import type { ConnectionOptions } from '#src/types'
 import type { FakeDriver } from '#src/drivers/FakeDriver'
 import type { Driver as DriverImpl } from '#src/drivers/Driver'
@@ -14,7 +15,7 @@ import type { VanillaDriver } from '#src/drivers/VanillaDriver'
 import type { DatabaseDriver } from '#src/drivers/DatabaseDriver'
 import { ConnectionFactory } from '#src/factories/ConnectionFactory'
 
-export class QueueImpl<Driver extends DriverImpl = any> {
+export class QueueImpl<Driver extends DriverImpl = any> extends Macroable {
   /**
    * The connection name used for this instance.
    */
@@ -29,6 +30,8 @@ export class QueueImpl<Driver extends DriverImpl = any> {
    * Creates a new instance of QueueImpl.
    */
   public constructor(athennaQueueOpts?: ConnectionOptions) {
+    super()
+
     this.driver = ConnectionFactory.fabricate(this.connectionName)
 
     this.connect(athennaQueueOpts)

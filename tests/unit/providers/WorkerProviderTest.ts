@@ -7,7 +7,7 @@
  * file that was distributed with this source code.
  */
 
-import { Exec, Path } from '@athenna/common'
+import { Path, Sleep } from '@athenna/common'
 import { LoggerProvider } from '@athenna/logger'
 import { QueueProvider, WorkerProvider } from '#src'
 import { PRODUCTS } from '#tests/fixtures/constants/products'
@@ -55,7 +55,7 @@ export class WorkerProviderTest {
       await productWorker.queue().add({ name: 'iPhone' + ' ' + i })
     }
 
-    await Exec.sleep(2000)
+    await Sleep.for(2).seconds().wait()
 
     assert.lengthOf(PRODUCTS, 10)
     assert.deepEqual(PRODUCTS[0], { name: 'iPhone 1' })

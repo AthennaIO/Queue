@@ -9,7 +9,7 @@
 
 import { sep } from 'node:path'
 import { Log } from '@athenna/logger'
-import { Exec, Module, Path } from '@athenna/common'
+import { Module, Path } from '@athenna/common'
 import { Annotation, ServiceProvider } from '@athenna/ioc'
 import type { BaseWorker } from '#src/workers/BaseWorker'
 
@@ -32,7 +32,7 @@ export class WorkerProvider extends ServiceProvider {
   public async boot() {
     const workers = Config.get<string[]>('rc.workers', [])
 
-    await Exec.concurrently(workers, async path => {
+    await workers.athenna.concurrently(async path => {
       const Worker = await Module.resolve(path, this.getMeta())
 
       if (Annotation.isAnnotated(Worker)) {
