@@ -60,23 +60,21 @@ export class WorkerProvider extends ServiceProvider {
           return
         }
 
-        if (Config.is('rc.bootLogs', true)) {
-          Log.channelOrVanilla('application').info(
-            'Processing jobs of %s queue',
-            queueName
-          )
-        }
+        Log.channelOrVanilla('worker').info({
+          msg: 'processing new job',
+          queue: queueName
+        })
 
         await queue.process(worker.handle.bind(worker))
 
         const jobs = await queue.length()
 
-        if (jobs && Config.is('rc.bootLogs', true)) {
-          Log.channelOrVanilla('application').info(
-            'still has %s jobs to process on %s queue',
-            jobs,
-            queueName
-          )
+        if (jobs) {
+          Log.channelOrVanilla('worker').info({
+            msg: 'still has jobs to process',
+            queue: queueName,
+            jobs
+          })
         }
       }, interval)
     })
