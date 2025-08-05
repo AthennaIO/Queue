@@ -165,6 +165,11 @@ export abstract class Driver<Client = any> {
   public abstract peek<T = any>(): Promise<T>
 
   /**
+   * Acknowledge the job removing it from the queue.
+   */
+  public abstract ack(jobId: string): Promise<void>
+
+  /**
    * Return the length of jobs inside the queue.
    */
   public abstract length(): Promise<number>
