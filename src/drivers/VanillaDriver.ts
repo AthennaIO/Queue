@@ -8,10 +8,12 @@
  */
 
 import { Log } from '@athenna/logger'
-import { Options } from '@athenna/common'
+import { Options, Uuid } from '@athenna/common'
 import { Driver } from '#src/drivers/Driver'
 import type { ConnectionOptions } from '#src/types'
 import { ConnectionFactory } from '#src/factories/ConnectionFactory'
+import { NotFoundJobException } from '#src/exceptions/NotFoundJobException'
+import { JobNotProcessingException } from '#src/exceptions/JobNotProcessingException'
 
 export class VanillaDriver extends Driver {
   private defineQueue() {
@@ -101,17 +103,25 @@ export class VanillaDriver extends Driver {
   public async add(data: unknown) {
     this.defineQueue()
 
-    this.client.queues[this.queueName].push(data)
+    this.client.queues[this.queueName].push({
+      id: Uuid.generate(),
+      status: 'pending',
+      attemptsLeft: this.attempts,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      data
+    })
   }
 
   /**
-   * Remove an job from the queue and return.
+   * Peek the next job to be processed from the queue and
+   * return. This method automatically removes the job from the queue.
    *
    * @example
    * ```ts
    * await Queue.add({ name: 'lenon' })
    *
-   * const user = await Queue.pop()
+   * const job = await Queue.pop()
    * ```
    */
   public async pop() {
@@ -125,13 +135,14 @@ export class VanillaDriver extends Driver {
   }
 
   /**
-   * Remove an job from the queue and return.
+   * Peek the next job to be processed from the queue and
+   * return. This method does not remove the job from the queue.
    *
    * @example
    * ```ts
    * await Queue.add({ name: 'lenon' })
    *
-   * const user = await Queue.pop()
+   * const job = await Queue.peek()
    * ```
    */
   public async peek() {
@@ -141,7 +152,7 @@ export class VanillaDriver extends Driver {
       return null
     }
 
-    return this.client.queues[this.queueName][0]
+    return this.client.queues[this.queueName].find(j => j.status === 'pending')
   }
 
   /**
@@ -158,6 +169,32 @@ export class VanillaDriver extends Driver {
     this.defineQueue()
 
     return this.client.queues[this.queueName].length
+  }
+
+  /**
+   * Acknowledge the job removing it from the queue.
+   *
+   * @example
+   * ```ts
+   * await Queue.ack(id)
+   * ```
+   */
+  public async ack(id: string) {
+    this.defineQueue()
+
+    const job = this.client.queues[this.queueName].find(j => j.id === id)
+
+    if (!job) {
+      throw new NotFoundJobException(id)
+    }
+
+    if (job.status !== 'processing') {
+      throw new JobNotProcessingException(id)
+    }
+
+    this.client.queues[this.queueName] = this.client.queues[
+      this.queueName
+    ].filter(j => j.id !== id)
   }
 
   /**
@@ -188,11 +225,22 @@ export class VanillaDriver extends Driver {
    * ```
    */
   public async process(processor: (data: unknown) => any | Promise<any>) {
-    const data = await this.pop()
+    const job = await this.peek()
+
+    if (!job) {
+      return
+    }
+
+    job.attemptsLeft--
+    job.status = 'processing'
 
     try {
-      await processor(data)
+      await processor(job)
     } catch (err) {
+      const shouldRetry = job.attemptsLeft > 0
+
+      await this.ack(job.id)
+
       Log.channelOrVanilla('exception').error({
         msg: `failed to process job: ${err.message}`,
         queue: this.queueName,
@@ -203,10 +251,28 @@ export class VanillaDriver extends Driver {
         details: err.details,
         metadata: err.metadata,
         stack: err.stack,
-        job: data
+        job
       })
 
-      this.client.queues[this.deadletter].push({ queue: this.queueName, data })
+      if (shouldRetry) {
+        job.status = 'pending'
+        job.updatedAt = new Date()
+        const delay = this.calculateBackoffDelay(job.attemptsLeft)
+
+        setTimeout(() => this.client.queues[this.queueName].push(job), delay)
+
+        return
+      }
+
+      if (this.deadletter) {
+        this.client.queues[this.deadletter].push({
+          ...job,
+          attemptsLeft: 0,
+          queue: this.deadletter,
+          formerQueue: this.queueName,
+          status: 'pending'
+        })
+      }
     }
   }
 }

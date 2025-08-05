@@ -9,8 +9,8 @@
 
 import { Log } from '@athenna/logger'
 import { Config } from '@athenna/config'
-import { Is, Options } from '@athenna/common'
 import { Driver } from '#src/drivers/Driver'
+import { Is, Options } from '@athenna/common'
 import type { ConnectionOptions } from '#src/types'
 import type { DatabaseImpl } from '@athenna/database'
 import { ConnectionFactory } from '#src/factories/ConnectionFactory'
@@ -113,7 +113,9 @@ export class DatabaseDriver extends Driver<DatabaseImpl> {
   public async add(data: unknown) {
     await this.client.table(this.table).create({
       queue: this.queueName,
-      data
+      data,
+      status: 'pending',
+      attemptsLeft: this.attempts
     })
   }
 
@@ -128,23 +130,19 @@ export class DatabaseDriver extends Driver<DatabaseImpl> {
    * ```
    */
   public async pop() {
-    const data = await this.client
-      .table(this.table)
-      .where('queue', this.queueName)
-      .latest()
-      .find()
+    const data = await this.peek()
 
     if (!data) {
-      return
+      return null
     }
+
+    await this.client.table(this.table).where('id', data.id).delete()
 
     if (Is.Json(data.data)) {
       data.data = JSON.parse(data.data)
     }
 
-    await this.client.table(this.table).where('id', data.id).delete()
-
-    return data.data
+    return data
   }
 
   /**
@@ -155,7 +153,7 @@ export class DatabaseDriver extends Driver<DatabaseImpl> {
    * ```ts
    * await Queue.add({ name: 'lenon' })
    *
-   * const user = await Queue.pop()
+   * const user = await Queue.peek()
    * ```
    */
   public async peek() {
@@ -173,7 +171,19 @@ export class DatabaseDriver extends Driver<DatabaseImpl> {
       data.data = JSON.parse(data.data)
     }
 
-    return data.data
+    return data
+  }
+
+  /**
+   * Acknowledge the job removing it from the queue.
+   *
+   * @example
+   * ```ts
+   * await Queue.ack(id)
+   * ```
+   */
+  public async ack(id: string) {
+    await this.client.table(this.table).where('id', id).delete()
   }
 
   /**
@@ -226,11 +236,21 @@ export class DatabaseDriver extends Driver<DatabaseImpl> {
    * ```
    */
   public async process(processor: (data: unknown) => any | Promise<any>) {
-    let data = await this.pop()
+    const job = await this.peek()
+
+    if (!job) {
+      return
+    }
+
+    job.attemptsLeft--
 
     try {
-      await processor(data)
+      await processor(job)
     } catch (err) {
+      const shouldRetry = job.attemptsLeft > 0
+
+      await this.ack(job.id)
+
       Log.channelOrVanilla('exception').error({
         msg: `failed to process job: ${err.message}`,
         queue: this.queueName,
@@ -241,18 +261,36 @@ export class DatabaseDriver extends Driver<DatabaseImpl> {
         details: err.details,
         metadata: err.metadata,
         stack: err.stack,
-        job: data
+        job
       })
 
-      if (!Is.String(data)) {
-        data = JSON.stringify(data)
+      if (shouldRetry) {
+        job.status = 'pending'
+
+        const delay = this.calculateBackoffDelay(job.attemptsLeft)
+
+        setTimeout(async () => {
+          await this.client.table(this.table).create({
+            id: job.id,
+            queue: this.queueName,
+            status: 'pending',
+            attemptsLeft: job.attemptsLeft,
+            data: job.data
+          })
+        }, delay)
+
+        return
       }
 
-      await this.client.table(this.table).create({
-        queue: this.deadletter,
-        formerQueue: this.queueName,
-        data
-      })
+      if (this.deadletter) {
+        await this.client.table(this.table).create({
+          attemptsLeft: 0,
+          queue: this.deadletter,
+          formerQueue: this.queueName,
+          status: 'pending',
+          data: job.data
+        })
+      }
     }
   }
 }

@@ -7,10 +7,11 @@
  * file that was distributed with this source code.
  */
 
+import type { Context } from '#src'
 import { BaseWorker } from '#src/workers/BaseWorker'
 
 export class HelloWorker extends BaseWorker {
-  public async handle(data: unknown) {
+  public async handle(data: Context) {
     console.log(data)
   }
 }

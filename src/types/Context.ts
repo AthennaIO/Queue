@@ -7,6 +7,12 @@
  * file that was distributed with this source code.
  */
 
-export * from '#src/types/Context'
-export * from '#src/types/WorkerOptions'
-export * from '#src/types/ConnectionOptions'
+export type Context<T = any> = {
+  id: string
+  data: T
+  attemptsLeft: number
+  queue: string
+  status: 'pending' | 'processing'
+  createdAt: Date
+  updatedAt: Date
+}

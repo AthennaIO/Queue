@@ -31,8 +31,8 @@ export default {
     vanilla: {
       driver: 'vanilla',
       queue: 'default',
-      workerInterval: 1000,
-      deadletter: 'deadletter'
+      deadletter: 'deadletter_queue_name',
+      attempts: 3
     },
 
     database: {
@@ -40,8 +40,8 @@ export default {
       table: 'jobs',
       connection: 'postgres',
       queue: 'default',
-      workerInterval: 1000,
-      deadletter: 'deadletter'
+      deadletter: 'deadletter_queue_name',
+      attempts: 3
     },
 
     discard: {

@@ -9,6 +9,8 @@ export class CreateJobsTable extends BaseMigration {
       builder.string('queue').notNullable()
       builder.string('formerQueue').nullable()
       builder.string('data').notNullable()
+      builder.integer('attemptsLeft').defaultTo(1)
+      builder.enu('status', ['pending', 'processing']).defaultTo('pending')
       builder.timestamps(true, true, true)
     })
   }

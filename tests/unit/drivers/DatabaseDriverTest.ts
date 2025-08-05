@@ -7,11 +7,11 @@
  * file that was distributed with this source code.
  */
 
-import { Path } from '@athenna/common'
+import { Path, Sleep } from '@athenna/common'
 import { Queue, QueueProvider } from '#src'
 import { LoggerProvider } from '@athenna/logger'
-import { Database, DatabaseImpl, DatabaseProvider } from '@athenna/database'
 import { Test, type Context, BeforeEach, AfterEach } from '@athenna/test'
+import { Database, DatabaseImpl, DatabaseProvider } from '@athenna/database'
 
 export class DatabaseDriverTest {
   @BeforeEach()
@@ -27,6 +27,8 @@ export class DatabaseDriverTest {
       builder.string('queue').notNullable()
       builder.string('formerQueue').nullable()
       builder.string('data').notNullable()
+      builder.integer('attemptsLeft').defaultTo(1)
+      builder.enu('status', ['pending', 'processing']).defaultTo('pending')
       builder.timestamps(true, true, true)
     })
   }
@@ -133,8 +135,13 @@ export class DatabaseDriverTest {
     const job = await queue.peek()
     const length = await queue.length()
 
-    assert.deepEqual(job, { name: 'lenon' })
     assert.deepEqual(length, 1)
+    assert.containSubset(job, {
+      status: 'pending',
+      attemptsLeft: 1,
+      queue: 'default',
+      data: { name: 'lenon' }
+    })
   }
 
   @Test()
@@ -146,23 +153,30 @@ export class DatabaseDriverTest {
     const job = await queue.pop()
     const length = await queue.length()
 
-    assert.deepEqual(job, { name: 'lenon' })
     assert.deepEqual(length, 0)
+    assert.containSubset(job, {
+      status: 'pending',
+      attemptsLeft: 1,
+      queue: 'default',
+      data: { name: 'lenon' }
+    })
   }
 
   @Test()
   public async shouldBeAbleToProcessTheNextJobFromTheQueueWithAProcessor({ assert }: Context) {
-    assert.plan(2)
+    assert.plan(1)
 
     const queue = Queue.connection('database')
 
     await queue.add({ name: 'lenon' })
 
     await queue.process(async job => {
-      const length = await queue.length()
-
-      assert.deepEqual(job, { name: 'lenon' })
-      assert.deepEqual(length, 0)
+      assert.containSubset(job, {
+        status: 'processing',
+        attemptsLeft: 1,
+        queue: 'default',
+        data: { name: 'lenon' }
+      })
     })
   }
 
@@ -175,6 +189,41 @@ export class DatabaseDriverTest {
     await queue.process(async () => {
       throw new Error('testing')
     })
+
+    const length = await queue.queue('deadletter').length()
+
+    assert.deepEqual(length, 1)
+  }
+
+  @Test()
+  public async shouldBeAbleToRetryTheJobIfBackoffIsConfiguredToQueue({ assert }: Context) {
+    const queue = Queue.connection('databaseBackoff')
+
+    await queue.add({ name: 'lenon' })
+
+    await queue.process(async () => {
+      throw new Error('testing')
+    })
+
+    await Sleep.for(1000).milliseconds().wait()
+
+    const jobFirstAttempt = await queue.peek()
+
+    assert.containSubset(jobFirstAttempt, {
+      status: 'pending',
+      attemptsLeft: 1,
+      data: { name: 'lenon' }
+    })
+
+    await queue.process(async () => {
+      throw new Error('testing')
+    })
+
+    await Sleep.for(1000).milliseconds().wait()
+
+    const jobSecondAttempt = await queue.peek()
+
+    assert.isNull(jobSecondAttempt)
 
     const length = await queue.queue('deadletter').length()
 

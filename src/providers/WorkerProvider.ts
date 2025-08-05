@@ -8,7 +8,6 @@
  */
 
 import { sep } from 'node:path'
-import { Log } from '@athenna/logger'
 import { Module, Path } from '@athenna/common'
 import { Annotation, ServiceProvider } from '@athenna/ioc'
 import type { BaseWorker } from '#src/workers/BaseWorker'
@@ -49,7 +48,6 @@ export class WorkerProvider extends ServiceProvider {
     })
 
     this.intervals = this.workers.map(({ alias, Worker }) => {
-      const queueName = Worker.queue()
       const interval = Worker.interval()
 
       return setInterval(async () => {
@@ -60,22 +58,7 @@ export class WorkerProvider extends ServiceProvider {
           return
         }
 
-        Log.channelOrVanilla('worker').info({
-          msg: 'processing new job',
-          queue: queueName
-        })
-
         await queue.process(worker.handle.bind(worker))
-
-        const jobs = await queue.length()
-
-        if (jobs) {
-          Log.channelOrVanilla('worker').info({
-            msg: 'still has jobs to process',
-            queue: queueName,
-            jobs
-          })
-        }
       }, interval)
     })
   }

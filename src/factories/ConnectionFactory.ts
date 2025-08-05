@@ -14,6 +14,7 @@ import { VanillaDriver } from '#src/drivers/VanillaDriver'
 import { DatabaseDriver } from '#src/drivers/DatabaseDriver'
 import { NotFoundDriverException } from '#src/exceptions/NotFoundDriverException'
 import { NotImplementedConfigException } from '#src/exceptions/NotImplementedConfigException'
+import type { ConnectionOptions } from '#src/types/index'
 
 export class ConnectionFactory {
   /**
@@ -29,17 +30,30 @@ export class ConnectionFactory {
     .set('vanilla', VanillaDriver)
     .set('database', DatabaseDriver)
 
-  public static fabricate(con: 'vanilla'): VanillaDriver
-  public static fabricate(con: 'database'): DatabaseDriver
-  public static fabricate(con: 'fake'): typeof FakeDriver
   public static fabricate(
-    con: 'vanilla' | 'database' | 'fake' | string
+    con: 'vanilla',
+    options?: ConnectionOptions['options']
+  ): VanillaDriver
+
+  public static fabricate(
+    con: 'database',
+    options?: ConnectionOptions['options']
+  ): DatabaseDriver
+
+  public static fabricate(
+    con: 'fake',
+    options?: ConnectionOptions['options']
+  ): typeof FakeDriver
+
+  public static fabricate(
+    con: 'vanilla' | 'database' | 'fake' | string,
+    options?: ConnectionOptions['options']
   ): VanillaDriver | DatabaseDriver | typeof FakeDriver
 
   /**
    * Fabricate a new connection for a specific driver.
    */
-  public static fabricate(con: string) {
+  public static fabricate(con: string, options?: ConnectionOptions['options']) {
     con = this.parseConName(con)
 
     const driverName = this.getConnectionDriver(con)
@@ -49,7 +63,7 @@ export class ConnectionFactory {
     if (!connection) {
       this.connections.set(con, { client: null })
 
-      return new Driver(con)
+      return new Driver(con, null, options)
     }
 
     if (connection.client) {
@@ -59,10 +73,10 @@ export class ConnectionFactory {
         driverName
       )
 
-      return new Driver(con, connection.client)
+      return new Driver(con, connection.client, options)
     }
 
-    return new Driver(con)
+    return new Driver(con, null, options)
   }
 
   /**

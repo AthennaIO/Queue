@@ -33,6 +33,12 @@ export class FakeDriver {
   public static isSavedOnFactory = false
   public static connection = 'fake'
   public static client: unknown = null
+  public static attempts: number = 1
+  public static backoff: {
+    type: 'fixed' | 'exponential'
+    delay: number
+    jitter: number
+  } = null
 
   /**
    * Clone the driver instance.
@@ -55,6 +61,13 @@ export class FakeDriver {
     this.client = client
 
     return this
+  }
+
+  /**
+   * Calculate the backoff delay.
+   */
+  public static calculateBackoffDelay() {
+    return 0
   }
 
   /**

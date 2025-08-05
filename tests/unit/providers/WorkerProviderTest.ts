@@ -9,46 +9,42 @@
 
 import { Path, Sleep } from '@athenna/common'
 import { LoggerProvider } from '@athenna/logger'
-import { QueueProvider, WorkerProvider } from '#src'
+import { Queue, QueueProvider, WorkerProvider } from '#src'
 import { PRODUCTS } from '#tests/fixtures/constants/products'
 import { Test, AfterEach, BeforeEach, type Context } from '@athenna/test'
 
 export class WorkerProviderTest {
+  public workerProvider: WorkerProvider = new WorkerProvider()
+
   @BeforeEach()
   public async beforeEach() {
     await Config.loadAll(Path.fixtures('config'))
 
     new QueueProvider().register()
     new LoggerProvider().register()
+
+    await this.workerProvider.boot()
   }
 
   @AfterEach()
   public async afterEach() {
+    await this.workerProvider.shutdown()
+
     ioc.reconstruct()
     Config.clear()
   }
 
   @Test()
   public async shouldBeAbleToRegisterWorkersFromRcFile({ assert }: Context) {
-    const workerProvider = new WorkerProvider()
-
-    await workerProvider.boot()
-
     assert.isTrue(ioc.has('annotatedWorker'))
     assert.isTrue(ioc.has('App/Workers/HelloWorker'))
     assert.isTrue(ioc.has('App/Workers/ProductWorker'))
 
-    assert.lengthOf(workerProvider.intervals, 3)
-
-    await workerProvider.shutdown()
+    assert.lengthOf(this.workerProvider.intervals, 3)
   }
 
   @Test()
   public async shouldBeAbleToProcessEventsOfQueueUsingWorker({ assert }: Context) {
-    const workerProvider = new WorkerProvider()
-
-    await workerProvider.boot()
-
     const productWorker = ioc.safeUse('App/Workers/ProductWorker')
 
     for (let i = 1; i <= 10; i++) {
@@ -59,7 +55,39 @@ export class WorkerProviderTest {
 
     assert.lengthOf(PRODUCTS, 10)
     assert.deepEqual(PRODUCTS[0], { name: 'iPhone 1' })
+  }
 
-    await workerProvider.shutdown()
+  @Test()
+  public async shouldBeAbleToRetryTheJobConfiguredInTheWorkerIfWorkerFailsToProcessIt({ assert }: Context) {
+    const productWorker = ioc.safeUse('App/Workers/ProductWorker')
+
+    await productWorker.queue().add({ name: 'iPhone 1', failOnFirstAttemptOnly: true })
+
+    await Sleep.for(3).seconds().wait()
+
+    const deadletterSize = await productWorker.queue().queue('products-deadletter').length()
+
+    assert.lengthOf(PRODUCTS, 1)
+    assert.deepEqual(deadletterSize, 0)
+    assert.deepEqual(PRODUCTS[0], { name: 'iPhone 1', failOnFirstAttemptOnly: true })
+  }
+
+  @Test()
+  public async shouldBeAbleToSendJobToDeadletterIfWorkerFailsToProcessItInAllAttempts({ assert }: Context) {
+    const productWorker = ioc.safeUse('App/Workers/ProductWorker')
+
+    await productWorker.queue().add({ name: 'iPhone 1', failOnAllAttempts: true })
+
+    await Sleep.for(3).seconds().wait()
+
+    const jobInDeadletter = await Queue.connection('vanilla').queue('products-deadletter').peek()
+
+    assert.containSubset(jobInDeadletter, {
+      attemptsLeft: 0,
+      status: 'pending',
+      queue: 'products-deadletter',
+      formerQueue: 'products',
+      data: { name: 'iPhone 1', failOnAllAttempts: true }
+    })
   }
 }
