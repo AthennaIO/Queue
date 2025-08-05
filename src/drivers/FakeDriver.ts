@@ -209,6 +209,11 @@ export class FakeDriver {
   }
 
   /**
+   * Acknowledge the job removing it from the queue.
+   */
+  public static async ack() {}
+
+  /**
    * Process the next job of the queue with a handler.
    *
    * @example

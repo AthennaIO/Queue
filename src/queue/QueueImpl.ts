@@ -229,6 +229,18 @@ export class QueueImpl<Driver extends DriverImpl = any> extends Macroable {
   }
 
   /**
+   * Acknowledge the job removing it from the queue.
+   *
+   * @example
+   * ```ts
+   * await Queue.ack(jobId)
+   * ```
+   */
+  public async ack(jobId: string) {
+    return this.driver.ack(jobId)
+  }
+
+  /**
    * Process the next item of the queue with a handler.
    *
    * @example
