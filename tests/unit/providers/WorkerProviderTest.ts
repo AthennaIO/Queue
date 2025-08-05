@@ -9,8 +9,8 @@
 
 import { Path, Sleep } from '@athenna/common'
 import { LoggerProvider } from '@athenna/logger'
+import { constants } from '#tests/fixtures/constants/index'
 import { Queue, QueueProvider, WorkerProvider } from '#src'
-import { PRODUCTS } from '#tests/fixtures/constants/products'
 import { Test, AfterEach, BeforeEach, type Context } from '@athenna/test'
 
 export class WorkerProviderTest {
@@ -28,6 +28,13 @@ export class WorkerProviderTest {
 
   @AfterEach()
   public async afterEach() {
+    const productWorker = ioc.safeUse('App/Workers/ProductWorker')
+
+    await productWorker.queue().truncate()
+    await productWorker.queue().queue('products-deadletter').truncate()
+
+    constants.PRODUCTS = []
+
     await this.workerProvider.shutdown()
 
     ioc.reconstruct()
@@ -53,8 +60,8 @@ export class WorkerProviderTest {
 
     await Sleep.for(2).seconds().wait()
 
-    assert.lengthOf(PRODUCTS, 10)
-    assert.deepEqual(PRODUCTS[0], { name: 'iPhone 1' })
+    assert.lengthOf(constants.PRODUCTS, 10)
+    assert.deepEqual(constants.PRODUCTS[0], { name: 'iPhone 1' })
   }
 
   @Test()
@@ -67,9 +74,9 @@ export class WorkerProviderTest {
 
     const deadletterSize = await productWorker.queue().queue('products-deadletter').length()
 
-    assert.lengthOf(PRODUCTS, 1)
+    assert.lengthOf(constants.PRODUCTS, 1)
     assert.deepEqual(deadletterSize, 0)
-    assert.deepEqual(PRODUCTS[0], { name: 'iPhone 1', failOnFirstAttemptOnly: true })
+    assert.deepEqual(constants.PRODUCTS[0], { name: 'iPhone 1', failOnFirstAttemptOnly: true })
   }
 
   @Test()

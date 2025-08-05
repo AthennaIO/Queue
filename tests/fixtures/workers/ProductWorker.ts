@@ -8,7 +8,7 @@
  */
 
 import { Worker, BaseWorker, type Context } from '#src'
-import { PRODUCTS } from '#tests/fixtures/constants/products'
+import { constants } from '#tests/fixtures/constants/index'
 
 @Worker()
 export class ProductWorker extends BaseWorker {
@@ -45,6 +45,6 @@ export class ProductWorker extends BaseWorker {
       throw new Error('testing')
     }
 
-    PRODUCTS.push(data.data)
+    constants.PRODUCTS.push(data.data)
   }
 }
