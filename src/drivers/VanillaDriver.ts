@@ -12,10 +12,13 @@ import { Options, Uuid } from '@athenna/common'
 import { Driver } from '#src/drivers/Driver'
 import type { ConnectionOptions } from '#src/types'
 import { ConnectionFactory } from '#src/factories/ConnectionFactory'
-import { NotFoundJobException } from '#src/exceptions/NotFoundJobException'
-import { JobNotProcessingException } from '#src/exceptions/JobNotProcessingException'
 
 export class VanillaDriver extends Driver {
+  /**
+   * Set the acked ids of the driver.
+   */
+  private ackedIds = new Set<string>()
+
   private defineQueue() {
     if (!this.client.queues[this.queueName]) {
       this.client.queues[this.queueName] = []
@@ -172,6 +175,20 @@ export class VanillaDriver extends Driver {
   }
 
   /**
+   * Find a job by its id.
+   *
+   * @example
+   * ```ts
+   * const job = await Queue.getJobById(id)
+   * ```
+   */
+  public async getJobById(id: string) {
+    this.defineQueue()
+
+    return this.client.queues[this.queueName].find(j => j.id === id)
+  }
+
+  /**
    * Acknowledge the job removing it from the queue.
    *
    * @example
@@ -182,14 +199,16 @@ export class VanillaDriver extends Driver {
   public async ack(id: string) {
     this.defineQueue()
 
-    const job = this.client.queues[this.queueName].find(j => j.id === id)
+    this.ackedIds.add(id)
+
+    const job = await this.getJobById(id)
 
     if (!job) {
-      throw new NotFoundJobException(id)
+      return
     }
 
     if (job.status !== 'processing') {
-      throw new JobNotProcessingException(id)
+      return
     }
 
     this.client.queues[this.queueName] = this.client.queues[
@@ -231,11 +250,22 @@ export class VanillaDriver extends Driver {
       return
     }
 
+    this.ackedIds.delete(job.id)
+
     job.attemptsLeft--
     job.status = 'processing'
 
     try {
       await processor(job)
+
+      /**
+       * If the job still exists after processing, it means that the job was
+       * not processed for some reason, so we need to put it back the pending
+       * status.
+       */
+      if (!this.ackedIds.has(job.id)) {
+        job.status = 'pending'
+      }
     } catch (err) {
       const shouldRetry = job.attemptsLeft > 0
 

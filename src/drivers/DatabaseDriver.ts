@@ -17,6 +17,11 @@ import { ConnectionFactory } from '#src/factories/ConnectionFactory'
 
 export class DatabaseDriver extends Driver<DatabaseImpl> {
   /**
+   * Set the acked ids of the driver.
+   */
+  private ackedIds = new Set<string>()
+
+  /**
    * The `connection` database that is being used.
    */
   public dbConnection: string
@@ -183,7 +188,13 @@ export class DatabaseDriver extends Driver<DatabaseImpl> {
    * ```
    */
   public async ack(id: string) {
-    await this.client.table(this.table).where('id', id).delete()
+    this.ackedIds.add(id)
+
+    await this.client
+      .table(this.table)
+      .where('id', id)
+      .where('status', 'processing')
+      .delete()
   }
 
   /**
@@ -242,10 +253,27 @@ export class DatabaseDriver extends Driver<DatabaseImpl> {
       return
     }
 
+    this.ackedIds.delete(job.id)
+
     job.attemptsLeft--
+    job.status = 'processing'
+
+    await this.client.table(this.table).where('id', job.id).update({
+      status: 'processing',
+      attemptsLeft: job.attemptsLeft
+    })
 
     try {
       await processor(job)
+
+      /**
+       * If the job still exists after processing, it means that the job was
+       * not processed for some reason, so we need to put it back the pending
+       * status.
+       */
+      if (!this.ackedIds.has(job.id)) {
+        job.status = 'pending'
+      }
     } catch (err) {
       const shouldRetry = job.attemptsLeft > 0
 
