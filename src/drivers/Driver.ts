@@ -42,13 +42,33 @@ export abstract class Driver<Client = any> {
   public deadletter: string
 
   /**
+   * Set the default number of attempts of the driver.
+   */
+  public attempts: number
+
+  /**
+   * Set the driver backoff of the driver.
+   */
+  public backoff?: {
+    type: 'fixed' | 'exponential'
+    delay: number
+    jitter: number
+  }
+
+  /**
    * Creates a new instance of the Driver.
    */
-  public constructor(connection: string | any, client: Client = null) {
+  public constructor(
+    connection: string | any,
+    client: Client = null,
+    options?: ConnectionOptions['options']
+  ) {
     const config = Config.get(`queue.connections.${connection}`)
 
-    this.queueName = config.queue
-    this.deadletter = config.deadletter
+    this.queueName = options?.queue || config.queue
+    this.backoff = options?.backoff || config.backoff || null
+    this.attempts = options?.attempts || config.attempts || 1
+    this.deadletter = options?.deadletter || config.deadletter
     this.connection = connection
 
     if (client) {
@@ -81,6 +101,27 @@ export abstract class Driver<Client = any> {
     this.client = client
 
     return this
+  }
+
+  /**
+   * Calculate the backoff delay.
+   */
+  public calculateBackoffDelay(attemptsLeft: number) {
+    if (!this.backoff) {
+      return 0
+    }
+
+    const { type, delay, jitter } = this.backoff
+
+    const baseDelay =
+      type === 'fixed'
+        ? delay
+        : Math.pow(2, this.attempts - attemptsLeft) * delay
+
+    const max = baseDelay * jitter
+    const random = Math.floor(Math.random() * (max - baseDelay + 1)) + baseDelay
+
+    return random
   }
 
   /**

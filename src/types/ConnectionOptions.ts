@@ -39,4 +39,56 @@ export type ConnectionOptions = {
    * @default true
    */
   connect?: boolean
+
+  /**
+   * Define the options for your connection.
+   */
+  options?: {
+    /**
+     * Define the number of attempts that your worker will
+     * try to process a job. By default, the `attempts` option
+     * from your connection will be used and if not defined,
+     * the default value will be `1`.
+     *
+     * @default Config.get(`queue.connections.${connection}.attempts`, 1)
+     */
+    attempts?: number
+
+    /**
+     * Define the backoff configuration for your worker re-attempts.
+     * By default, the `backoff` option from your connection
+     * will be used and if not defined, the default value
+     * will be `null`.
+     */
+    backoff?: {
+      type: 'fixed' | 'exponential'
+      delay: number
+      jitter: number
+    }
+
+    /**
+     * Define the interval in milliseconds where the worker will
+     * try to look for data in the queue.
+     *
+     * @default Config.get(`queue.connections.${connection}.workerInterval`, 1000)
+     */
+    interval?: number
+
+    /**
+     * Define the deadletter queue of your worker. If any
+     * problem happens when trying to consume your event,
+     * it will be added to the deadletter queue.
+     *
+     * @default Config.get(`queue.connections.${connection}.deadletter`)
+     */
+    deadletter?: string
+
+    /**
+     * Define the queue that your worker will use to
+     * perform operations.
+     *
+     * @default Config.get(`queue.connections.${connection}.queue`)
+     */
+    queue?: string
+  }
 }

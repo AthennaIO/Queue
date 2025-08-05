@@ -32,7 +32,10 @@ export class QueueImpl<Driver extends DriverImpl = any> extends Macroable {
   public constructor(athennaQueueOpts?: ConnectionOptions) {
     super()
 
-    this.driver = ConnectionFactory.fabricate(this.connectionName)
+    this.driver = ConnectionFactory.fabricate(
+      this.connectionName,
+      athennaQueueOpts?.options
+    )
 
     this.connect(athennaQueueOpts)
   }
@@ -72,7 +75,7 @@ export class QueueImpl<Driver extends DriverImpl = any> extends Macroable {
     con: 'fake' | 'vanilla' | 'database' | string,
     options?: ConnectionOptions
   ): QueueImpl<Driver> {
-    const driver = ConnectionFactory.fabricate(con)
+    const driver = ConnectionFactory.fabricate(con, options?.options)
     const queue = new QueueImpl<typeof driver>(options)
 
     queue.connectionName = con

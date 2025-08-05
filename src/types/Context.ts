@@ -7,4 +7,12 @@
  * file that was distributed with this source code.
  */
 
-export const PRODUCTS = []
+export type Context<T = any> = {
+  id: string
+  data: T
+  attemptsLeft: number
+  queue: string
+  status: 'pending' | 'processing'
+  createdAt: Date
+  updatedAt: Date
+}

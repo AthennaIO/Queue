@@ -40,8 +40,19 @@ export default {
     vanilla: {
       driver: 'vanilla',
       queue: 'default',
-      workerInterval: 1000,
       deadletter: 'deadletter'
+    },
+
+    vanillaBackoff: {
+      driver: 'vanilla',
+      queue: 'default',
+      deadletter: 'deadletter',
+      attempts: 2,
+      backoff: {
+        type: 'fixed',
+        delay: 1000,
+        jitter: 0.5
+      }
     },
 
     database: {
@@ -49,8 +60,21 @@ export default {
       table: 'jobs',
       connection: 'sqlite',
       queue: 'default',
-      workerInterval: 1000,
       deadletter: 'deadletter'
+    },
+
+    databaseBackoff: {
+      driver: 'database',
+      table: 'jobs',
+      connection: 'sqlite',
+      queue: 'default',
+      deadletter: 'deadletter',
+      attempts: 2,
+      backoff: {
+        type: 'fixed',
+        delay: 1000,
+        jitter: 0.5
+      }
     },
 
     discard: {

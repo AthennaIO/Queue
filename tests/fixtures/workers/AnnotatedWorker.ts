@@ -7,14 +7,14 @@
  * file that was distributed with this source code.
  */
 
-import { Worker, BaseWorker } from '#src'
+import { Worker, BaseWorker, type Context } from '#src'
 
 @Worker({
   type: 'singleton',
   alias: 'annotatedWorker'
 })
 export class AnnotatedWorker extends BaseWorker {
-  public async handle(data: unknown) {
+  public async handle(data: Context) {
     console.log(data)
   }
 }

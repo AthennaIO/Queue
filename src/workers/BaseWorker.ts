@@ -35,6 +35,34 @@ export class BaseWorker {
   }
 
   /**
+   * Define the number of attempts that your worker will
+   * try to process a job. By default, the `attempts` option
+   * from your connection will be used and if not defined,
+   * the default value will be `1`.
+   *
+   * @default Config.get(`queue.connections.${connection}.attempts`, 1)
+   */
+  public static attempts() {
+    const connection = this.connection()
+
+    return Config.get(`queue.connections.${connection}.attempts`, 1)
+  }
+
+  /**
+   * Define the backoff configuration for your worker re-attempts.
+   * By default, the `backoff` option from your connection
+   * will be used and if not defined, the default value
+   * will be `null`.
+   *
+   * @default Config.get(`queue.connections.${connection}.backoff`, null)
+   */
+  public static backoff() {
+    const connection = this.connection()
+
+    return Config.get(`queue.connections.${connection}.backoff`, null)
+  }
+
+  /**
    * Define the deadletter queue of your worker. If any
    * problem happens when trying to consume your event,
    * it will be added to the deadletter queue.
@@ -44,19 +72,19 @@ export class BaseWorker {
   public static deadletter() {
     const connection = this.connection()
 
-    return Config.get(`queue.connections.${connection}.deadletter`)
+    return Config.get(`queue.connections.${connection}.deadletter`, null)
   }
 
   /**
    * Define the interval in milliseconds where the worker will
    * try to look for data in the queue.
    *
-   * @default Config.get(`queue.connections.${connection}.workerInterval`)
+   * @default Config.get(`queue.connections.${connection}.workerInterval`, 1000)
    */
   public static interval() {
     const connection = this.connection()
 
-    return Config.get(`queue.connections.${connection}.workerInterval`)
+    return Config.get(`queue.connections.${connection}.workerInterval`, 1000)
   }
 
   /**
@@ -73,6 +101,14 @@ export class BaseWorker {
   public queue() {
     const Job = this.constructor as typeof BaseWorker
 
-    return Queue.connection(Job.connection()).queue(Job.queue())
+    return Queue.connection(Job.connection(), {
+      options: {
+        queue: Job.queue(),
+        backoff: Job.backoff(),
+        attempts: Job.attempts(),
+        interval: Job.interval(),
+        deadletter: Job.deadletter()
+      }
+    })
   }
 }
