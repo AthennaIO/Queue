@@ -193,13 +193,18 @@ export class VanillaDriver extends Driver {
     try {
       await processor(data)
     } catch (err) {
-      if (Config.is('rc.bootLogs', true)) {
-        Log.channelOrVanilla('application').error(
-          'adding data of %s to deadletter queue due to: %o',
-          this.queueName,
-          err
-        )
-      }
+      Log.channelOrVanilla('exception').error({
+        msg: `failed to process job: ${err.message}`,
+        queue: this.queueName,
+        deadletter: this.deadletter,
+        name: err.name,
+        code: err.code,
+        help: err.help,
+        details: err.details,
+        metadata: err.metadata,
+        stack: err.stack,
+        job: data
+      })
 
       this.client.queues[this.deadletter].push({ queue: this.queueName, data })
     }
