@@ -1,6 +1,6 @@
 {
   "name": "@athenna/queue",
-  "version": "5.10.0",
+  "version": "5.11.0",
   "description": "The Athenna queue handler.",
   "license": "MIT",
   "author": "João Lenon <lenon@athenna.io>",
@@ -38,6 +38,7 @@
     "./package": "./package.json",
     "./package.json": "./package.json",
     "./testing/plugins": "./src/testing/plugins/index.js",
+    "./kernels/WorkerKernel": "./src/kernels/WorkerKernel.js",
     "./providers/QueueProvider": "./src/providers/QueueProvider.js",
     "./providers/WorkerProvider": "./src/providers/WorkerProvider.js",
     "./commands/MakeWorkerCommand": "./src/commands/MakeWorkerCommand.js"
