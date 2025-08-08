@@ -8,8 +8,10 @@
  */
 
 import { Macroable } from '@athenna/common'
-import type { ConnectionOptions } from '#src/types'
+import { Worker } from '#src/facades/Worker'
 import type { FakeDriver } from '#src/drivers/FakeDriver'
+import type { Context, ConnectionOptions } from '#src/types'
+import type { AwsSqsDriver } from '#src/drivers/AwsSqsDriver'
 import type { Driver as DriverImpl } from '#src/drivers/Driver'
 import type { VanillaDriver } from '#src/drivers/VanillaDriver'
 import type { DatabaseDriver } from '#src/drivers/DatabaseDriver'
@@ -24,7 +26,11 @@ export class QueueImpl<Driver extends DriverImpl = any> extends Macroable {
   /**
    * The drivers responsible for handling queue operations.
    */
-  public driver: VanillaDriver | DatabaseDriver | typeof FakeDriver = null
+  public driver:
+    | VanillaDriver
+    | DatabaseDriver
+    | AwsSqsDriver
+    | typeof FakeDriver = null
 
   /**
    * Creates a new instance of QueueImpl.
@@ -51,16 +57,22 @@ export class QueueImpl<Driver extends DriverImpl = any> extends Macroable {
   ): QueueImpl<DatabaseDriver>
 
   public connection(
+    con: 'aws-sqs',
+    options?: ConnectionOptions
+  ): QueueImpl<AwsSqsDriver>
+
+  public connection(
     con: 'fake',
     options?: ConnectionOptions
   ): QueueImpl<typeof FakeDriver>
 
   public connection(
-    con: 'fake' | 'vanilla' | 'database' | string,
+    con: 'fake' | 'vanilla' | 'database' | 'aws-sqs' | string,
     options?: ConnectionOptions
   ):
     | QueueImpl<VanillaDriver>
     | QueueImpl<DatabaseDriver>
+    | QueueImpl<AwsSqsDriver>
     | QueueImpl<typeof FakeDriver>
 
   /**
@@ -72,7 +84,7 @@ export class QueueImpl<Driver extends DriverImpl = any> extends Macroable {
    * ```
    */
   public connection(
-    con: 'fake' | 'vanilla' | 'database' | string,
+    con: 'fake' | 'vanilla' | 'database' | 'aws-sqs' | string,
     options?: ConnectionOptions
   ): QueueImpl<Driver> {
     const driver = ConnectionFactory.fabricate(con, options?.options)
@@ -188,13 +200,13 @@ export class QueueImpl<Driver extends DriverImpl = any> extends Macroable {
   }
 
   /**
-   * Remove an item from the queue and return.
+   * Get an item from the queue without removing it and return.
    *
    * @example
    * ```ts
    * await Queue.add({ name: 'lenon' })
    *
-   * const user = await Queue.pop()
+   * const user = await Queue.peek()
    * ```
    */
   public async peek() {
@@ -252,7 +264,19 @@ export class QueueImpl<Driver extends DriverImpl = any> extends Macroable {
    * })
    * ```
    */
-  public async process(processor: (item: unknown) => any | Promise<any>) {
+  public async process(processor: (job: Context) => any | Promise<any>) {
     return this.driver.process(processor)
+  }
+
+  /**
+   * Return the Worker facade.
+   *
+   * @example
+   * ```ts
+   * const worker = Queue.worker()
+   * ```
+   */
+  public worker() {
+    return Worker
   }
 }

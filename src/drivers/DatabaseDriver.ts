@@ -31,13 +31,17 @@ export class DatabaseDriver extends Driver<DatabaseImpl> {
    */
   public table: string
 
-  public constructor(con: string, client: any = null) {
-    super(con, client)
+  public constructor(
+    con: string,
+    client: any = null,
+    options?: ConnectionOptions['options']
+  ) {
+    super(con, client, options)
 
-    const { table, connection } = Config.get(`queue.connections.${con}`)
+    const config = Config.get(`queue.connections.${con}`)
 
-    this.table = table
-    this.dbConnection = connection
+    this.table = options?.table || config?.table
+    this.dbConnection = options?.connection || config?.connection
   }
 
   /**
@@ -135,17 +139,21 @@ export class DatabaseDriver extends Driver<DatabaseImpl> {
    * ```
    */
   public async pop() {
-    const data = await this.peek()
+    const data = await this.client
+      .table(this.table)
+      .where('queue', this.queueName)
+      .latest()
+      .find()
 
     if (!data) {
       return null
     }
 
-    await this.client.table(this.table).where('id', data.id).delete()
-
     if (Is.Json(data.data)) {
       data.data = JSON.parse(data.data)
     }
+
+    await this.client.table(this.table).where('id', data.id).delete()
 
     return data
   }

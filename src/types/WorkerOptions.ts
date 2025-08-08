@@ -9,6 +9,20 @@
 
 export type WorkerOptions = {
   /**
+   * The name of the worker.
+   *
+   * @default target.name
+   */
+  name?: string
+
+  /**
+   * The queue connection that will be used to get the configurations.
+   *
+   * @default Config.get('queue.default')
+   */
+  connection?: string
+
+  /**
    * The alias that will be used to register the worker inside
    * the service container.
    *

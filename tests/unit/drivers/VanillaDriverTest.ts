@@ -190,12 +190,11 @@ export class VanillaDriverTest {
       throw new Error('testing')
     })
 
-    await Sleep.for(1000).milliseconds().wait()
+    await Sleep.for(1500).milliseconds().wait()
 
     const jobFirstAttempt = await queue.peek()
 
     assert.containSubset(jobFirstAttempt, {
-      status: 'pending',
       attemptsLeft: 1,
       data: { name: 'lenon' }
     })

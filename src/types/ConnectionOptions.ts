@@ -44,6 +44,8 @@ export type ConnectionOptions = {
    * Define the options for your connection.
    */
   options?: {
+    [key: string]: any
+
     /**
      * Define the number of attempts that your worker will
      * try to process a job. By default, the `attempts` option
@@ -90,5 +92,14 @@ export type ConnectionOptions = {
      * @default Config.get(`queue.connections.${connection}.queue`)
      */
     queue?: string
+
+    /**
+     * Define the visibility timeout of the worker in seconds.
+     * If your worker is not able to process a job in the
+     * defined time, the job will be put back in the queue.
+     *
+     * @default 30
+     */
+    visibilityTimeout?: number
   }
 }

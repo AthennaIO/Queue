@@ -7,6 +7,7 @@
  * file that was distributed with this source code.
  */
 
+import { Utils } from '#src/utils'
 import { Config } from '@athenna/config'
 import type { ConnectionOptions } from '#src/types'
 
@@ -47,6 +48,21 @@ export abstract class Driver<Client = any> {
   public attempts: number
 
   /**
+   * Set the default visibility timeout of the driver.
+   */
+  public visibilityTimeout: number
+
+  /**
+   * Set the default no ack delay of the driver.
+   */
+  public noAckDelayMs: number
+
+  /**
+   * Set the default worker interval of the driver.
+   */
+  public workerInterval: number
+
+  /**
    * Set the driver backoff of the driver.
    */
   public backoff?: {
@@ -65,10 +81,19 @@ export abstract class Driver<Client = any> {
   ) {
     const config = Config.get(`queue.connections.${connection}`)
 
+    this.workerInterval =
+      options?.workerInterval || config.workerInterval || 1000
+    this.noAckDelayMs = Utils.computeNoAckDelayMs(
+      this.workerInterval,
+      `${this.connection}:${this.queueName}:noack`
+    )
+
     this.queueName = options?.queue || config.queue
     this.backoff = options?.backoff || config.backoff || null
     this.attempts = options?.attempts || config.attempts || 1
     this.deadletter = options?.deadletter || config.deadletter
+    this.visibilityTimeout =
+      options?.visibilityTimeout || config.visibilityTimeout || 30000
     this.connection = connection
 
     if (client) {
@@ -111,7 +136,11 @@ export abstract class Driver<Client = any> {
       return 0
     }
 
-    const { type, delay, jitter } = this.backoff
+    let { type, delay, jitter } = this.backoff
+
+    if (jitter < 0) {
+      jitter = 0
+    }
 
     const baseDelay =
       type === 'fixed'
@@ -162,7 +191,7 @@ export abstract class Driver<Client = any> {
    * Get the first job from the queue without removing
    * and return.
    */
-  public abstract peek<T = any>(): Promise<T>
+  public abstract peek<T = any>(workerId: string): Promise<T>
 
   /**
    * Acknowledge the job removing it from the queue.

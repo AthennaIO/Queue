@@ -53,4 +53,9 @@ export class QueueProviderTest {
 
     assert.isFalse(queue.isConnected())
   }
+
+  @Test()
+  public async shouldNotThrowErrorIfProviderIsNotRegisteredWhenShuttingDown({ assert }: Context) {
+    await assert.doesNotReject(() => new QueueProvider().shutdown())
+  }
 }

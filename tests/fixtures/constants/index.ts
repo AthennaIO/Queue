@@ -8,5 +8,11 @@
  */
 
 export const constants = {
-  PRODUCTS: []
+  PRODUCTS: [],
+  RUN_MAP: {
+    helloWorker: false,
+    productWorker: false,
+    annotatedWorker: false,
+    decoratedWorker: false
+  }
 }

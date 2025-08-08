@@ -34,6 +34,9 @@ export class FakeDriver {
   public static connection = 'fake'
   public static client: unknown = null
   public static attempts: number = 1
+  public static visibilityTimeout: number = 30000
+  public static workerInterval: number = 1000
+  public static noAckDelayMs: number = 1700
   public static backoff: {
     type: 'fixed' | 'exponential'
     delay: number

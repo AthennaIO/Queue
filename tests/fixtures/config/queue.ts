@@ -43,6 +43,12 @@ export default {
       deadletter: 'deadletter'
     },
 
+    awsSqs: {
+      driver: 'aws-sqs',
+      queue: 'default',
+      deadletter: 'deadletter'
+    },
+
     vanillaBackoff: {
       driver: 'vanilla',
       queue: 'default',

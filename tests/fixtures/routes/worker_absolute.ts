@@ -7,10 +7,9 @@
  * file that was distributed with this source code.
  */
 
-import { constants } from '#tests/fixtures/constants/index'
+import { Queue } from '#src'
 
-export class HelloWorker {
-  public async handle() {
-    constants.RUN_MAP.helloWorker = true
-  }
-}
+Queue.worker()
+  .task()
+  .name('route_worker_absolute')
+  .handler(() => {})

@@ -21,13 +21,15 @@ export default class WorkerAnnotationTest extends BaseTest {
     assert.isFalse(metadata.registered)
     assert.isUndefined(metadata.camelAlias)
     assert.equal(metadata.type, 'transient')
-    assert.equal(metadata.alias, 'App/Workers/ProductWorker')
+    assert.equal(metadata.name, 'ProductWorker')
+    assert.equal(metadata.connection, 'vanilla')
+    assert.equal(metadata.alias, 'App/Queue/Workers/ProductWorker')
   }
 
   @Test()
   @Cleanup(() => ioc.reconstruct())
   public async shouldNotReRegisterTheWorkerAliasIfItIsAlreadyRegisteredInTheServiceContainer({ assert }: Context) {
-    ioc.singleton('App/Workers/ProductWorker', () => {})
+    ioc.singleton('App/Queue/Workers/ProductWorker', () => {})
 
     const ProductWorker = await this.import('#tests/fixtures/workers/ProductWorker')
 

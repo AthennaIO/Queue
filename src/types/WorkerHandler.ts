@@ -7,10 +7,6 @@
  * file that was distributed with this source code.
  */
 
-import { constants } from '#tests/fixtures/constants/index'
+import type { Context } from '#src/types/Context'
 
-export class HelloWorker {
-  public async handle() {
-    constants.RUN_MAP.helloWorker = true
-  }
-}
+export type WorkerHandler = (ctx?: Context) => any | Promise<any>

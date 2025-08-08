@@ -49,8 +49,12 @@
     "#src": "./src/index.js",
     "#src/types": "./src/types/index.js",
     "#src/debug": "./src/debug/index.js",
+    "#src/utils": "./src/utils/index.js",
     "#tests/*": "./tests/*.js",
     "#tests": "./tests/index.js"
+  },
+  "dependencies": {
+    "@aws-sdk/client-sqs": "^3.859.0"
   },
   "devDependencies": {
     "@athenna/artisan": "^5.7.0",
@@ -182,5 +186,5 @@
     "templates": {
       "worker": "./templates/worker.edge"
     }
-  }
+  } 
 }
