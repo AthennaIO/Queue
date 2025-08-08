@@ -22,6 +22,6 @@ export class WorkerProvider extends ServiceProvider {
       return
     }
 
-    worker.close().truncate()
+    worker.close()
   }
 }
