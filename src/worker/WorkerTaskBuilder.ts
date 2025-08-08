@@ -101,7 +101,7 @@ export class WorkerTaskBuilder {
 
     this.worker.handler = async ctx => {
       if (WorkerImpl.rTracerPlugin) {
-        return WorkerImpl.rTracerPlugin.runWithId(async ctx => {
+        return WorkerImpl.rTracerPlugin.runWithId(async () => {
           await handler(ctx)
 
           logIfEnabled(ctx)
