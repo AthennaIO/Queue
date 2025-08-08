@@ -7,17 +7,12 @@
  * file that was distributed with this source code.
  */
 
-import type { ConnectionOptions } from '#src/types'
+import type { Job, ConnectionOptions } from '#src/types'
 
 export type Context<T = any> = {
   name: string
   connection: string
   options: ConnectionOptions['options']
   traceId?: string
-  job: {
-    id: string
-    attemptsLeft: number
-    data: T
-    metadata?: Record<string, any>
-  }
+  job: Job<T>
 }

@@ -45,7 +45,7 @@ export class QueueProviderTest {
 
     queueProvider.register()
 
-    const queue = Queue.connection('vanilla')
+    const queue = Queue.connection('memory')
 
     assert.isTrue(queue.isConnected())
 

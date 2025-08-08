@@ -186,5 +186,5 @@
     "templates": {
       "worker": "./templates/worker.edge"
     }
-  } 
+  }
 }

@@ -12,7 +12,7 @@ import { TestDriver } from '#tests/fixtures/drivers/TestDriver'
 import { AfterEach, BeforeEach, Test, type Context } from '@athenna/test'
 import { NotFoundDriverException } from '#src/exceptions/NotFoundDriverException'
 import { NotImplementedConfigException } from '#src/exceptions/NotImplementedConfigException'
-import { FakeDriver, VanillaDriver, AwsSqsDriver, ConnectionFactory, DatabaseDriver } from '#src'
+import { FakeDriver, MemoryDriver, AwsSqsDriver, ConnectionFactory, DatabaseDriver } from '#src'
 
 export class ConnectionFactoryTest {
   @BeforeEach()
@@ -31,7 +31,7 @@ export class ConnectionFactoryTest {
   public async shouldBeAbleToGetAllAvailableDrivers({ assert }: Context) {
     const availableDrivers = ConnectionFactory.availableDrivers()
 
-    assert.deepEqual(availableDrivers, ['fake', 'aws-sqs', 'vanilla', 'database'])
+    assert.deepEqual(availableDrivers, ['fake', 'aws_sqs', 'memory', 'database'])
   }
 
   @Test()
@@ -58,10 +58,10 @@ export class ConnectionFactoryTest {
   }
 
   @Test()
-  public async shouldBeAbleToFabricateNewConnectionsAndReturnVanillaDriverInstance({ assert }: Context) {
-    const driver = ConnectionFactory.fabricate('vanilla')
+  public async shouldBeAbleToFabricateNewConnectionsAndReturnMemoryDriverInstance({ assert }: Context) {
+    const driver = ConnectionFactory.fabricate('memory')
 
-    assert.instanceOf(driver, VanillaDriver)
+    assert.instanceOf(driver, MemoryDriver)
   }
 
   @Test()

@@ -21,7 +21,7 @@ export default {
   |
   */
 
-  default: Env('QUEUE_CONNECTION', 'vanilla'),
+  default: Env('QUEUE_CONNECTION', 'memory'),
 
   /*
    |--------------------------------------------------------------------------
@@ -32,27 +32,41 @@ export default {
    | is used by your application. A default configuration has been added
    | for each back-end shipped with Athenna. You are free to add more.
    |
-   | Drivers: "vanilla", "database", "fake"
+   | Drivers: "memory", "database", "awsSqs", "fake"
    |
    */
 
   connections: {
-    vanilla: {
-      driver: 'vanilla',
+    memory: {
+      driver: 'memory',
       queue: 'default',
       deadletter: 'deadletter'
+    },
+
+    memoryBackoff: {
+      driver: 'memory',
+      queue: 'default',
+      deadletter: 'deadletter',
+      attempts: 2,
+      backoff: {
+        type: 'fixed',
+        delay: 1000,
+        jitter: 0.5
+      }
     },
 
     awsSqs: {
-      driver: 'aws-sqs',
-      queue: 'default',
-      deadletter: 'deadletter'
+      driver: 'aws_sqs',
+      type: 'standard',
+      queue: 'https://sqs.sa-east-1.amazonaws.com/528757804004/athenna_queue',
+      deadletter: 'https://sqs.sa-east-1.amazonaws.com/528757804004/athenna_queue_dlq'
     },
 
-    vanillaBackoff: {
-      driver: 'vanilla',
-      queue: 'default',
-      deadletter: 'deadletter',
+    awsSqsBackoff: {
+      driver: 'aws_sqs',
+      type: 'standard',
+      queue: 'https://sqs.sa-east-1.amazonaws.com/528757804004/athenna_queue',
+      deadletter: 'https://sqs.sa-east-1.amazonaws.com/528757804004/athenna_queue_dlq',
       attempts: 2,
       backoff: {
         type: 'fixed',

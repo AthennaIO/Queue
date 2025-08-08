@@ -12,7 +12,7 @@ import type { Driver } from '#src/drivers/Driver'
 import type { ConnectionOptions } from '#src/types'
 import { FakeDriver } from '#src/drivers/FakeDriver'
 import { AwsSqsDriver } from '#src/drivers/AwsSqsDriver'
-import { VanillaDriver } from '#src/drivers/VanillaDriver'
+import { MemoryDriver } from '#src/drivers/MemoryDriver'
 import { DatabaseDriver } from '#src/drivers/DatabaseDriver'
 import { NotFoundDriverException } from '#src/exceptions/NotFoundDriverException'
 import { NotImplementedConfigException } from '#src/exceptions/NotImplementedConfigException'
@@ -28,14 +28,14 @@ export class ConnectionFactory {
    */
   public static drivers: Map<string, any> = new Map()
     .set('fake', FakeDriver)
-    .set('aws-sqs', AwsSqsDriver)
-    .set('vanilla', VanillaDriver)
+    .set('aws_sqs', AwsSqsDriver)
+    .set('memory', MemoryDriver)
     .set('database', DatabaseDriver)
 
   public static fabricate(
-    con: 'vanilla',
+    con: 'memory',
     options?: ConnectionOptions['options']
-  ): VanillaDriver
+  ): MemoryDriver
 
   public static fabricate(
     con: 'database',
@@ -43,7 +43,7 @@ export class ConnectionFactory {
   ): DatabaseDriver
 
   public static fabricate(
-    con: 'aws-sqs',
+    con: 'aws_sqs',
     options?: ConnectionOptions['options']
   ): AwsSqsDriver
 
@@ -53,9 +53,9 @@ export class ConnectionFactory {
   ): typeof FakeDriver
 
   public static fabricate(
-    con: 'vanilla' | 'database' | 'fake' | 'aws-sqs' | string,
+    con: 'memory' | 'database' | 'fake' | 'aws_sqs' | string,
     options?: ConnectionOptions['options']
-  ): VanillaDriver | DatabaseDriver | AwsSqsDriver | typeof FakeDriver
+  ): MemoryDriver | DatabaseDriver | AwsSqsDriver | typeof FakeDriver
 
   /**
    * Fabricate a new connection for a specific driver.

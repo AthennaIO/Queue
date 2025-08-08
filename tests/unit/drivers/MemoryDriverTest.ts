@@ -12,7 +12,7 @@ import { Path, Sleep } from '@athenna/common'
 import { LoggerProvider } from '@athenna/logger'
 import { Test, type Context, BeforeEach, AfterEach } from '@athenna/test'
 
-export class VanillaDriverTest {
+export class MemoryDriverTest {
   @BeforeEach()
   public async beforeEach() {
     await Config.loadAll(Path.fixtures('config'))
@@ -31,14 +31,14 @@ export class VanillaDriverTest {
 
   @Test()
   public async shouldBeAbleToConnectToDriver({ assert }: Context) {
-    Queue.connection('vanilla')
+    Queue.connection('memory')
 
     assert.isTrue(Queue.isConnected())
   }
 
   @Test()
   public async shouldBeAbleToCloseTheConnectionWithDriver({ assert }: Context) {
-    const queue = Queue.connection('vanilla')
+    const queue = Queue.connection('memory')
 
     await queue.close()
 
@@ -47,7 +47,7 @@ export class VanillaDriverTest {
 
   @Test()
   public async shouldBeAbleToCloneTheQueueInstance({ assert }: Context) {
-    const driver = Queue.connection('vanilla').driver
+    const driver = Queue.connection('memory').driver
     const otherDriver = driver.clone()
 
     driver.isConnected = false
@@ -57,14 +57,14 @@ export class VanillaDriverTest {
 
   @Test()
   public async shouldBeAbleToGetDriverClient({ assert }: Context) {
-    const client = Queue.connection('vanilla').driver.getClient()
+    const client = Queue.connection('memory').driver.getClient()
 
     assert.isDefined(client)
   }
 
   @Test()
   public async shouldBeAbleToSetDifferentClientForDriver({ assert }: Context) {
-    const driver = Queue.connection('vanilla').driver
+    const driver = Queue.connection('memory').driver
 
     driver.setClient({ hello: 'world' } as any)
 
@@ -73,14 +73,14 @@ export class VanillaDriverTest {
 
   @Test()
   public async shouldBeAbleToSeeHowManyJobsAreInsideTheQueue({ assert }: Context) {
-    const length = await Queue.connection('vanilla').length()
+    const length = await Queue.connection('memory').length()
 
     assert.deepEqual(length, 0)
   }
 
   @Test()
   public async shouldBeAbleToAddJobsToTheQueue({ assert }: Context) {
-    const queue = Queue.connection('vanilla')
+    const queue = Queue.connection('memory')
 
     await queue.add({ hello: 'world' })
 
@@ -93,7 +93,7 @@ export class VanillaDriverTest {
 
   @Test()
   public async shouldBeAbleToAddJobsToADifferentQueue({ assert }: Context) {
-    const queue = Queue.connection('vanilla')
+    const queue = Queue.connection('memory')
 
     await queue.queue('other').add({ hello: 'world' })
 
@@ -106,7 +106,7 @@ export class VanillaDriverTest {
 
   @Test()
   public async shouldBeAbleToVerifyIfTheQueueIsEmpty({ assert }: Context) {
-    const queue = Queue.connection('vanilla')
+    const queue = Queue.connection('memory')
 
     const isEmpty = await queue.isEmpty()
 
@@ -115,7 +115,7 @@ export class VanillaDriverTest {
 
   @Test()
   public async shouldBeAbleToPeekTheNextJobWithoutRemovingItFromTheQueue({ assert }: Context) {
-    const queue = Queue.connection('vanilla')
+    const queue = Queue.connection('memory')
 
     await queue.add({ name: 'lenon' })
 
@@ -124,15 +124,14 @@ export class VanillaDriverTest {
 
     assert.deepEqual(length, 1)
     assert.containSubset(job, {
-      status: 'pending',
-      attemptsLeft: 1,
+      attempts: 1,
       data: { name: 'lenon' }
     })
   }
 
   @Test()
   public async shouldBeAbleToPopTheNextJobRemovingItFromTheQueue({ assert }: Context) {
-    const queue = Queue.connection('vanilla')
+    const queue = Queue.connection('memory')
 
     await queue.add({ name: 'lenon' })
 
@@ -141,8 +140,7 @@ export class VanillaDriverTest {
 
     assert.deepEqual(length, 0)
     assert.containSubset(job, {
-      status: 'pending',
-      attemptsLeft: 1,
+      attempts: 1,
       data: { name: 'lenon' }
     })
   }
@@ -151,15 +149,13 @@ export class VanillaDriverTest {
   public async shouldBeAbleToProcessTheNextJobFromTheQueueWithAProcessor({ assert }: Context) {
     assert.plan(1)
 
-    const queue = Queue.connection('vanilla')
+    const queue = Queue.connection('memory')
 
     await queue.add({ name: 'lenon' })
 
     await queue.process(async job => {
       assert.containSubset(job, {
-        status: 'processing',
-        attemptsLeft: 1,
-        queue: 'default',
+        attempts: 1,
         data: { name: 'lenon' }
       })
     })
@@ -167,7 +163,7 @@ export class VanillaDriverTest {
 
   @Test()
   public async shouldBeAbleToSendTheJobToDeadletterQueueIfProcessorFails({ assert }: Context) {
-    const queue = Queue.connection('vanilla')
+    const queue = Queue.connection('memory')
 
     await queue.add({ name: 'lenon' })
 
@@ -182,7 +178,7 @@ export class VanillaDriverTest {
 
   @Test()
   public async shouldBeAbleToRetryTheJobIfBackoffIsConfiguredToQueue({ assert }: Context) {
-    const queue = Queue.connection('vanillaBackoff')
+    const queue = Queue.connection('memoryBackoff')
 
     await queue.add({ name: 'lenon' })
 
@@ -195,7 +191,7 @@ export class VanillaDriverTest {
     const jobFirstAttempt = await queue.peek()
 
     assert.containSubset(jobFirstAttempt, {
-      attemptsLeft: 1,
+      attempts: 1,
       data: { name: 'lenon' }
     })
 
@@ -216,7 +212,7 @@ export class VanillaDriverTest {
 
   @Test()
   public async shouldBeAbleToTruncateAllJobs({ assert }: Context) {
-    const queue = Queue.connection('vanilla')
+    const queue = Queue.connection('memory')
 
     await queue.add({ name: 'lenon' })
 

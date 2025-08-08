@@ -84,14 +84,6 @@ export class WorkerTaskBuilder {
    * ```
    */
   public handler(handler: WorkerHandler) {
-    const getCtx = (job: any) => ({
-      name: this.worker.name,
-      traceId: WorkerImpl.rTracerPlugin ? WorkerImpl.rTracerPlugin.id() : null,
-      connection: this.worker.connection,
-      options: this.worker.options,
-      job
-    })
-
     const logIfEnabled = (ctx: any) => {
       if (WorkerImpl.loggerIsSet) {
         const channel = Config.get('worker.logger.channel', 'worker')
@@ -107,18 +99,14 @@ export class WorkerTaskBuilder {
       }
     }
 
-    this.worker.handler = async (job: any) => {
+    this.worker.handler = async ctx => {
       if (WorkerImpl.rTracerPlugin) {
-        return WorkerImpl.rTracerPlugin.runWithId(async (job: any) => {
-          const ctx = getCtx(job)
-
+        return WorkerImpl.rTracerPlugin.runWithId(async ctx => {
           await handler(ctx)
 
           logIfEnabled(ctx)
         })
       }
-
-      const ctx = getCtx(job)
 
       await handler(ctx)
 
@@ -162,7 +150,7 @@ export class WorkerTaskBuilder {
    *
    * @example
    * ```ts
-   * new WorkerTaskBuilder().connection('vanilla')
+   * new WorkerTaskBuilder().connection('memory')
    * ```
    */
   public connection(connection: string) {
@@ -178,7 +166,7 @@ export class WorkerTaskBuilder {
    * ```ts
    * new WorkerTaskBuilder()
    *   .name('my_worker')
-   *   .connection('vanilla')
+   *   .connection('memory')
    *   .handler((ctx) => console.log(`worker ${ctx.name} is running`))
    *   .run()
    * ```
@@ -188,7 +176,19 @@ export class WorkerTaskBuilder {
       options: this.worker.options
     })
 
-    await queue.process(this.worker.handler)
+    await queue.process(job => {
+      const ctx = {
+        name: this.worker.name,
+        traceId: WorkerImpl.rTracerPlugin
+          ? WorkerImpl.rTracerPlugin.id()
+          : null,
+        connection: this.worker.connection,
+        options: this.worker.options,
+        job
+      }
+
+      return this.worker.handler(ctx)
+    })
   }
 
   /**
@@ -198,7 +198,7 @@ export class WorkerTaskBuilder {
    * ```ts
    * new WorkerTaskBuilder()
    *   .name('my_worker')
-   *   .connection('vanilla')
+   *   .connection('memory')
    *   .handler((ctx) => console.log(`worker ${ctx.name} is running`))
    *   .start()
    * ```

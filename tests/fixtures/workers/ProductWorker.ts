@@ -10,14 +10,14 @@
 import { Worker, type Context } from '#src'
 import { constants } from '#tests/fixtures/constants/index'
 
-@Worker({ connection: 'vanilla' })
+@Worker({ connection: 'memory' })
 export class ProductWorker {
   public async handle(ctx: Context) {
     if (ctx.job.data.failOnAllAttempts) {
       throw new Error('testing')
     }
 
-    if (ctx.job.data.failOnFirstAttemptOnly && ctx.job.attemptsLeft >= 1) {
+    if (ctx.job.data.failOnFirstAttemptOnly && ctx.job.attempts >= 1) {
       throw new Error('testing')
     }
 

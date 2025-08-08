@@ -9,11 +9,11 @@
 
 import { Macroable } from '@athenna/common'
 import { Worker } from '#src/facades/Worker'
+import type { Job, ConnectionOptions } from '#src/types'
 import type { FakeDriver } from '#src/drivers/FakeDriver'
-import type { Context, ConnectionOptions } from '#src/types'
 import type { AwsSqsDriver } from '#src/drivers/AwsSqsDriver'
 import type { Driver as DriverImpl } from '#src/drivers/Driver'
-import type { VanillaDriver } from '#src/drivers/VanillaDriver'
+import type { MemoryDriver } from '#src/drivers/MemoryDriver'
 import type { DatabaseDriver } from '#src/drivers/DatabaseDriver'
 import { ConnectionFactory } from '#src/factories/ConnectionFactory'
 
@@ -27,7 +27,7 @@ export class QueueImpl<Driver extends DriverImpl = any> extends Macroable {
    * The drivers responsible for handling queue operations.
    */
   public driver:
-    | VanillaDriver
+    | MemoryDriver
     | DatabaseDriver
     | AwsSqsDriver
     | typeof FakeDriver = null
@@ -47,9 +47,9 @@ export class QueueImpl<Driver extends DriverImpl = any> extends Macroable {
   }
 
   public connection(
-    con: 'vanilla',
+    con: 'memory',
     options?: ConnectionOptions
-  ): QueueImpl<VanillaDriver>
+  ): QueueImpl<MemoryDriver>
 
   public connection(
     con: 'database',
@@ -57,7 +57,7 @@ export class QueueImpl<Driver extends DriverImpl = any> extends Macroable {
   ): QueueImpl<DatabaseDriver>
 
   public connection(
-    con: 'aws-sqs',
+    con: 'aws_sqs',
     options?: ConnectionOptions
   ): QueueImpl<AwsSqsDriver>
 
@@ -67,10 +67,10 @@ export class QueueImpl<Driver extends DriverImpl = any> extends Macroable {
   ): QueueImpl<typeof FakeDriver>
 
   public connection(
-    con: 'fake' | 'vanilla' | 'database' | 'aws-sqs' | string,
+    con: 'fake' | 'memory' | 'database' | 'aws_sqs' | string,
     options?: ConnectionOptions
   ):
-    | QueueImpl<VanillaDriver>
+    | QueueImpl<MemoryDriver>
     | QueueImpl<DatabaseDriver>
     | QueueImpl<AwsSqsDriver>
     | QueueImpl<typeof FakeDriver>
@@ -84,7 +84,7 @@ export class QueueImpl<Driver extends DriverImpl = any> extends Macroable {
    * ```
    */
   public connection(
-    con: 'fake' | 'vanilla' | 'database' | 'aws-sqs' | string,
+    con: 'fake' | 'memory' | 'database' | 'aws_sqs' | string,
     options?: ConnectionOptions
   ): QueueImpl<Driver> {
     const driver = ConnectionFactory.fabricate(con, options?.options)
@@ -264,7 +264,7 @@ export class QueueImpl<Driver extends DriverImpl = any> extends Macroable {
    * })
    * ```
    */
-  public async process(processor: (job: Context) => any | Promise<any>) {
+  public async process(processor: (job: Job) => any | Promise<any>) {
     return this.driver.process(processor)
   }
 

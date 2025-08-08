@@ -18,15 +18,69 @@ import {
 } from '@aws-sdk/client-sqs'
 
 import { Log } from '@athenna/logger'
+import { createHash } from 'node:crypto'
 import { Driver } from '#src/drivers/Driver'
-import { Is, Options } from '@athenna/common'
+import { Is, Options, Uuid } from '@athenna/common'
 import type { ConnectionOptions } from '#src/types'
 import { ConnectionFactory } from '#src/factories/ConnectionFactory'
+import { NotFifoSqsQueueTypeException } from '#src/exceptions/NotFifoSqsQueueTypeException'
 
 export class AwsSqsDriver extends Driver<SQSClient> {
+  /**
+   * Set the acked ids of the driver.
+   */
+  private static ackedIds = new Set<string>()
+
+  private type: 'standard' | 'fifo'
   private region: string
   private awsAccessKeyId: string
   private awsSecretAccessKey: string
+
+  /**
+   * Convert milliseconds to seconds.
+   */
+  private msToS(v: number) {
+    const s = Math.ceil(v / 1000)
+    return Math.max(0, Math.min(43200, s))
+  }
+
+  private fifoContentBasedDedup?: boolean
+  private fifoGroupId?: string
+  private dlqFifoGroupId?: string
+
+  /**
+   * Ensure the FIFO attributes are loaded.
+   */
+  private async ensureFifoAttrsLoaded() {
+    if (this.type !== 'fifo' || this.fifoContentBasedDedup !== undefined) {
+      return
+    }
+
+    const { Attributes } = await this.client.send(
+      new GetQueueAttributesCommand({
+        QueueUrl: this.queueName,
+        AttributeNames: ['FifoQueue', 'ContentBasedDeduplication']
+      })
+    )
+
+    const isFifo = Attributes?.FifoQueue === 'true'
+
+    if (!isFifo || !this.queueName.endsWith('.fifo')) {
+      throw new NotFifoSqsQueueTypeException(this.queueName)
+    }
+
+    this.fifoContentBasedDedup =
+      Attributes?.ContentBasedDeduplication === 'true'
+  }
+
+  /**
+   * Generate a deduplication id for the job.
+   */
+  private genDedupId(body: string) {
+    const hash = createHash('sha256').update(body).digest('hex')
+
+    return `${hash}:${Date.now()}`.slice(0, 128)
+  }
 
   public constructor(
     con: string,
@@ -37,6 +91,7 @@ export class AwsSqsDriver extends Driver<SQSClient> {
 
     const config = Config.get(`queue.connections.${con}`)
 
+    this.type = options?.type || config?.type || 'standard'
     this.region = options?.region || config?.region || Env('AWS_REGION')
     this.awsAccessKeyId =
       options?.awsAccessKeyId ||
@@ -46,6 +101,21 @@ export class AwsSqsDriver extends Driver<SQSClient> {
       options?.awsSecretAccessKey ||
       config?.awsSecretAccessKey ||
       Env('AWS_SECRET_ACCESS_KEY')
+
+    this.fifoGroupId =
+      options?.messageGroupId || config?.messageGroupId || 'default'
+    this.dlqFifoGroupId =
+      options?.dlqMessageGroupId || config?.dlqMessageGroupId || 'dlq'
+
+    if (
+      Is.Boolean(
+        options?.contentBasedDeduplication ?? config?.contentBasedDeduplication
+      )
+    ) {
+      this.fifoContentBasedDedup = Boolean(
+        options?.contentBasedDeduplication ?? config?.contentBasedDeduplication
+      )
+    }
   }
 
   /**
@@ -101,6 +171,8 @@ export class AwsSqsDriver extends Driver<SQSClient> {
 
     this.isConnected = false
 
+    this.client.destroy()
+
     ConnectionFactory.setClient(this.connection, null)
   }
 
@@ -135,14 +207,24 @@ export class AwsSqsDriver extends Driver<SQSClient> {
    * ```
    */
   public async add(data: any) {
-    if (Is.Object(data)) {
-      data = JSON.stringify(data)
-    }
+    data = Is.Object(data) ? JSON.stringify(data) : String(data)
 
-    const cmd = new SendMessageCommand({
+    const params: any = {
       QueueUrl: this.queueName,
       MessageBody: data
-    })
+    }
+
+    if (this.type === 'fifo') {
+      await this.ensureFifoAttrsLoaded()
+
+      params.MessageGroupId = this.fifoGroupId
+
+      if (!this.fifoContentBasedDedup) {
+        params.MessageDeduplicationId = this.genDedupId(data)
+      }
+    }
+
+    const cmd = new SendMessageCommand(params)
 
     await this.client.send(cmd)
   }
@@ -159,12 +241,18 @@ export class AwsSqsDriver extends Driver<SQSClient> {
    * ```
    */
   public async pop() {
-    const cmd = new ReceiveMessageCommand({
+    const params: any = {
       QueueUrl: this.queueName,
       MaxNumberOfMessages: 1,
       WaitTimeSeconds: 20,
-      MessageSystemAttributeNames: ['All']
-    })
+      MessageSystemAttributeNames: ['All', 'ApproximateReceiveCount']
+    }
+
+    if (this.type === 'fifo') {
+      params.ReceiveRequestAttemptId = Uuid.generate()
+    }
+
+    const cmd = new ReceiveMessageCommand(params)
 
     const { Messages } = await this.client.send(cmd)
 
@@ -174,13 +262,20 @@ export class AwsSqsDriver extends Driver<SQSClient> {
 
     const job = Messages[0]
     const { Body, ...rest } = job
-    const data = JSON.parse(Body)
+    const data = Is.Json(Body) ? JSON.parse(Body) : Body
     const receiveCount = Number(job.Attributes?.ApproximateReceiveCount || '1')
-    const attemptsLeft = Math.max(this.attempts - receiveCount, 0)
+    const attempts = Math.max(this.attempts - receiveCount, 0)
+
+    if (this.visibilityTimeout) {
+      await this.changeJobVisibility(
+        job.ReceiptHandle!,
+        this.msToS(this.visibilityTimeout)
+      )
+    }
 
     return {
       id: job.ReceiptHandle,
-      attemptsLeft,
+      attempts,
       data,
       metadata: rest
     } as any
@@ -198,35 +293,7 @@ export class AwsSqsDriver extends Driver<SQSClient> {
    * ```
    */
   public async peek() {
-    const cmd = new ReceiveMessageCommand({
-      QueueUrl: this.queueName,
-      MaxNumberOfMessages: 1,
-      WaitTimeSeconds: 0,
-      VisibilityTimeout: 5,
-      AttributeNames: ['All']
-    })
-
-    const { Messages } = await this.client.send(cmd)
-
-    if (!Messages?.length) {
-      return null
-    }
-
-    const job = Messages[0]
-
-    await this.changeJobVisibility(job.ReceiptHandle, 0)
-
-    const { Body, ...rest } = job
-    const data = Is.Json(Body) ? JSON.parse(Body) : Body
-    const receiveCount = Number(job.Attributes?.ApproximateReceiveCount || '1')
-    const attemptsLeft = Math.max(this.attempts - receiveCount, 0)
-
-    return {
-      id: job.ReceiptHandle!,
-      attemptsLeft,
-      data,
-      metadata: rest
-    } as any
+    return null
   }
 
   /**
@@ -242,7 +309,7 @@ export class AwsSqsDriver extends Driver<SQSClient> {
   public async length() {
     const cmd = new GetQueueAttributesCommand({
       QueueUrl: this.queueName,
-      AttributeNames: ['ApproximateNumberOfMessages']
+      AttributeNames: ['All', 'ApproximateNumberOfMessages']
     })
 
     const { Attributes } = await this.client.send(cmd)
@@ -265,6 +332,8 @@ export class AwsSqsDriver extends Driver<SQSClient> {
     })
 
     await this.client.send(cmd)
+
+    AwsSqsDriver.ackedIds.add(id)
   }
 
   /**
@@ -296,46 +365,69 @@ export class AwsSqsDriver extends Driver<SQSClient> {
    */
   public async process(processor: (data: unknown) => any | Promise<any>) {
     const job = await this.pop()
+    const requeueJitterMs = Math.floor(Math.random() * this.workerInterval)
 
     if (!job) {
       return
     }
 
+    AwsSqsDriver.ackedIds.delete(job.id)
+
     try {
-      await processor(job.data)
-      await this.ack(job.id)
-    } catch (err) {
-      Log.channelOrVanilla('exception').error({
-        msg: `failed to process job: ${err.message}`,
-        queue: this.queueName,
-        deadletter: this.deadletter,
-        name: err.name,
-        code: err.code,
-        help: err.help,
-        details: err.details,
-        metadata: err.metadata,
-        stack: err.stack,
-        job
+      await processor({
+        id: job.id,
+        attempts: job.attempts,
+        data: job.data
       })
 
+      if (!AwsSqsDriver.ackedIds.has(job.id)) {
+        await this.changeJobVisibility(
+          job.id,
+          this.msToS(this.noAckDelayMs + requeueJitterMs)
+        )
+      }
+    } catch (err) {
       const receiveCount = Number(
-        job.metadata.Attributes?.ApproximateReceiveCount || '1'
+        job.metadata.Attributes?.ApproximateReceiveCount ?? '1'
       )
+      const attempts = Math.max(this.attempts - receiveCount, 0)
+      const shouldRetry = attempts > 0
 
-      const shouldRetry = receiveCount < this.attempts
+      if (Config.is('worker.logger.prettifyException')) {
+        Log.channelOrVanilla('exception').error(
+          await err.toAthennaException().prettify()
+        )
+      } else {
+        Log.channelOrVanilla('exception').error({
+          msg: `failed to process job: ${err.message}`,
+          queue: this.queueName,
+          deadletter: this.deadletter,
+          name: err.name,
+          code: err.code,
+          help: err.help,
+          details: err.details,
+          metadata: err.metadata,
+          stack: err.stack,
+          job
+        })
+      }
 
       if (shouldRetry) {
-        const delay = this.calculateBackoffDelay(receiveCount)
+        const delay = this.calculateBackoffDelay(job.attempts)
 
-        await this.changeJobVisibility(job.id, delay)
+        await this.changeJobVisibility(
+          job.id,
+          this.msToS(delay + requeueJitterMs)
+        )
 
         return
       }
 
       if (this.deadletter) {
         await this.sendJobToDLQ(job)
-        await this.ack(job.id)
       }
+
+      await this.ack(job.id)
     }
   }
 
@@ -347,10 +439,17 @@ export class AwsSqsDriver extends Driver<SQSClient> {
       job.data = JSON.stringify(job.data)
     }
 
-    const cmd = new SendMessageCommand({
+    const params: any = {
       QueueUrl: this.deadletter,
       MessageBody: job.data
-    })
+    }
+
+    if (this.type === 'fifo' || this.deadletter?.endsWith?.('.fifo')) {
+      params.MessageGroupId = this.dlqFifoGroupId
+      params.MessageDeduplicationId = this.genDedupId(job.data)
+    }
+
+    const cmd = new SendMessageCommand(params)
 
     await this.client.send(cmd)
   }
@@ -358,11 +457,11 @@ export class AwsSqsDriver extends Driver<SQSClient> {
   /**
    * Change the job visibility values in SQS.
    */
-  private async changeJobVisibility(id: string, visibility: number) {
+  private async changeJobVisibility(id: string, seconds: number) {
     const cmd = new ChangeMessageVisibilityCommand({
       QueueUrl: this.queueName,
       ReceiptHandle: id,
-      VisibilityTimeout: visibility
+      VisibilityTimeout: Math.max(0, Math.min(43200, Math.floor(seconds)))
     })
 
     await this.client.send(cmd)

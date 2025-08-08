@@ -74,7 +74,7 @@ export class WorkerKernelTest {
 
     Worker.task()
       .name('r_tracer')
-      .connection('vanilla')
+      .connection('memory')
       .handler(ctx => {
         traceId = ctx.traceId
       })

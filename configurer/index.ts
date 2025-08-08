@@ -39,6 +39,10 @@ export default class QueueConfigurer extends BaseConfigurer {
       return new File('./queue').copy(Path.config(`queue.${Path.ext()}`))
     })
 
+    task.addPromise(`Create worker.${Path.ext()} config file`, () => {
+      return new File('./worker').copy(Path.config(`worker.${Path.ext()}`))
+    })
+
     task.addPromise('Update commands of .athennarc.json', () => {
       return this.rc
         .setTo(

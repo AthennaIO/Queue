@@ -7,7 +7,9 @@
  * file that was distributed with this source code.
  */
 
-export * from '#src/types/Job'
-export * from '#src/types/Context'
-export * from '#src/types/WorkerOptions'
-export * from '#src/types/ConnectionOptions'
+export type Job<T = any> = {
+  id: string
+  attempts: number
+  data: T
+  metadata?: Record<string, any>
+}

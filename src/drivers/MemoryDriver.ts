@@ -13,11 +13,11 @@ import { Options, Uuid } from '@athenna/common'
 import type { ConnectionOptions } from '#src/types'
 import { ConnectionFactory } from '#src/factories/ConnectionFactory'
 
-export class VanillaDriver extends Driver {
+export class MemoryDriver extends Driver {
   /**
    * Set the acked ids of the driver.
    */
-  private ackedIds = new Set<string>()
+  private static ackedIds = new Set<string>()
 
   private defineQueue() {
     if (!this.client.queues[this.queueName]) {
@@ -27,21 +27,6 @@ export class VanillaDriver extends Driver {
     if (!this.client.queues[this.deadletter]) {
       this.client.queues[this.deadletter] = []
     }
-  }
-
-  private releaseExpiredLeases() {
-    const now = Date.now()
-
-    this.client.queues[this.queueName].forEach(job => {
-      if (
-        job.status === 'processing' &&
-        job.leaseUntil &&
-        job.leaseUntil <= now
-      ) {
-        job.status = 'pending'
-        job.leaseUntil = null
-      }
-    })
   }
 
   /**
@@ -123,11 +108,24 @@ export class VanillaDriver extends Driver {
 
     this.client.queues[this.queueName].push({
       id: Uuid.generate(),
-      status: 'pending',
-      attemptsLeft: this.attempts,
+      attempts: this.attempts,
       availableAt: Date.now(),
-      leaseUntil: null,
+      reservedUntil: null,
+      createdAt: Date.now(),
       data
+    })
+  }
+
+  /**
+   * Release any job that has expired leases.
+   */
+  public async releaseExpiredLeases() {
+    const now = Date.now()
+
+    this.client.queues[this.queueName].forEach(job => {
+      if (job.reservedUntil && job.reservedUntil <= now) {
+        job.reservedUntil = null
+      }
     })
   }
 
@@ -165,7 +163,8 @@ export class VanillaDriver extends Driver {
    */
   public async peek() {
     this.defineQueue()
-    this.releaseExpiredLeases()
+
+    await this.releaseExpiredLeases()
 
     if (!this.client.queues[this.queueName].length) {
       return null
@@ -174,9 +173,7 @@ export class VanillaDriver extends Driver {
     const now = Date.now()
 
     return this.client.queues[this.queueName].find(job => {
-      return (
-        job.status === 'pending' && job.availableAt <= now && !job.leaseUntil
-      )
+      return job.availableAt <= now && !job.reservedUntil
     })
   }
 
@@ -208,7 +205,7 @@ export class VanillaDriver extends Driver {
     this.defineQueue()
 
     const index = this.client.queues[this.queueName].findIndex(
-      job => job.id === id && job.status === 'processing'
+      job => job.id === id
     )
 
     if (index === -1) {
@@ -216,7 +213,7 @@ export class VanillaDriver extends Driver {
     }
 
     this.client.queues[this.queueName].splice(index, 1)
-    this.ackedIds.add(id)
+    MemoryDriver.ackedIds.add(id)
   }
 
   /**
@@ -254,72 +251,66 @@ export class VanillaDriver extends Driver {
       return
     }
 
-    this.ackedIds.delete(job.id)
+    MemoryDriver.ackedIds.delete(job.id)
 
-    job.attemptsLeft--
-    job.status = 'processing'
-    job.leaseUntil = Date.now() + this.visibilityTimeout
+    job.attempts--
+    job.reservedUntil = Date.now() + this.visibilityTimeout
 
     try {
       await processor({
         id: job.id,
-        attemptsLeft: job.attemptsLeft,
+        attempts: job.attempts,
         data: job.data
       })
 
       /**
        * If the job still exists after processing, it means that the job was
-       * not processed for some reason, so we need to put it back the pending
-       * status.
+       * not processed for some reason, so we need to make it available again
+       * after a delay.
        */
-      if (!this.ackedIds.has(job.id)) {
-        job.status = 'pending'
-        job.leaseUntil = null
+      if (!MemoryDriver.ackedIds.has(job.id)) {
+        job.reservedUntil = null
         job.availableAt = Date.now() + this.noAckDelayMs + requeueJitterMs
       }
     } catch (err) {
-      const shouldRetry = job.attemptsLeft > 0
+      const shouldRetry = job.attempts > 0
 
-      job.leaseUntil = null
+      job.reservedUntil = null
 
-      Log.channelOrVanilla('exception').error({
-        msg: `failed to process job: ${err.message}`,
-        queue: this.queueName,
-        deadletter: this.deadletter,
-        name: err.name,
-        code: err.code,
-        help: err.help,
-        details: err.details,
-        metadata: err.metadata,
-        stack: err.stack,
-        job
-      })
+      if (Config.is('worker.logger.prettifyException')) {
+        Log.channelOrVanilla('exception').error(
+          await err.toAthennaException().prettify()
+        )
+      } else {
+        Log.channelOrVanilla('exception').error({
+          msg: `failed to process job: ${err.message}`,
+          queue: this.queueName,
+          deadletter: this.deadletter,
+          name: err.name,
+          code: err.code,
+          help: err.help,
+          details: err.details,
+          metadata: err.metadata,
+          stack: err.stack,
+          job
+        })
+      }
 
       if (shouldRetry) {
-        job.status = 'pending'
         job.availableAt =
           Date.now() +
-          this.calculateBackoffDelay(job.attemptsLeft) +
+          this.calculateBackoffDelay(job.attempts) +
           requeueJitterMs
 
         return
       }
 
-      const index = this.client.queues[this.queueName].findIndex(
-        j => j.id === job.id
-      )
-
-      if (index !== -1) {
-        this.client.queues[this.queueName].splice(index, 1)
-      }
+      await this.ack(job.id)
 
       if (this.deadletter) {
         this.client.queues[this.deadletter].push({
           ...job,
-          attemptsLeft: 0,
-          queue: this.deadletter,
-          formerQueue: this.queueName,
-          status: 'pending'
+          attempts: 0
         })
       }
     }

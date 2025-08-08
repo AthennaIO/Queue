@@ -131,7 +131,7 @@ export abstract class Driver<Client = any> {
   /**
    * Calculate the backoff delay.
    */
-  public calculateBackoffDelay(attemptsLeft: number) {
+  public calculateBackoffDelay(attempts: number) {
     if (!this.backoff) {
       return 0
     }
@@ -143,9 +143,7 @@ export abstract class Driver<Client = any> {
     }
 
     const baseDelay =
-      type === 'fixed'
-        ? delay
-        : Math.pow(2, this.attempts - attemptsLeft) * delay
+      type === 'fixed' ? delay : Math.pow(2, this.attempts - attempts) * delay
 
     const max = baseDelay * jitter
     const random = Math.floor(Math.random() * (max - baseDelay + 1)) + baseDelay

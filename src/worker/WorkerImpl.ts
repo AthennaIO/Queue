@@ -21,7 +21,7 @@ export class WorkerImpl {
    * @example
    * ```ts
    * Worker.task().name('my_worker')
-   *   .connection('vanilla')
+   *   .connection('memory')
    *   .handler((ctx) => console.log(`worker ${ctx.name} is running`))
    *   .start()
    * ```
