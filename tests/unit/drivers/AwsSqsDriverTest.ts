@@ -7,23 +7,30 @@
  * file that was distributed with this source code.
  */
 
-import { Queue, QueueProvider } from '#src'
-import { Path, Sleep } from '@athenna/common'
+import { Is, Path } from '@athenna/common'
+import { EnvHelper } from '@athenna/config'
 import { LoggerProvider } from '@athenna/logger'
-import { Test, type Context, BeforeEach, AfterEach } from '@athenna/test'
+import { BaseTest } from '#tests/helpers/BaseTest'
+import { Queue, QueueProvider, WorkerProvider } from '#src'
+import { Test, type Context, BeforeEach, AfterEach, Skip } from '@athenna/test'
 
-export class VanillaDriverTest {
+export class AwsSqsDriverTest extends BaseTest {
   @BeforeEach()
   public async beforeEach() {
+    EnvHelper.resolveFilePath(Path.pwd('.env'))
     await Config.loadAll(Path.fixtures('config'))
 
     new QueueProvider().register()
+    new WorkerProvider().register()
     new LoggerProvider().register()
   }
 
   @AfterEach()
   public async afterEach() {
     await Queue.closeAll()
+
+    Queue.worker().close()
+
     ioc.reconstruct()
 
     Config.clear()
@@ -31,14 +38,14 @@ export class VanillaDriverTest {
 
   @Test()
   public async shouldBeAbleToConnectToDriver({ assert }: Context) {
-    Queue.connection('vanilla')
+    Queue.connection('awsSqs')
 
     assert.isTrue(Queue.isConnected())
   }
 
   @Test()
   public async shouldBeAbleToCloseTheConnectionWithDriver({ assert }: Context) {
-    const queue = Queue.connection('vanilla')
+    const queue = Queue.connection('awsSqs')
 
     await queue.close()
 
@@ -47,7 +54,7 @@ export class VanillaDriverTest {
 
   @Test()
   public async shouldBeAbleToCloneTheQueueInstance({ assert }: Context) {
-    const driver = Queue.connection('vanilla').driver
+    const driver = Queue.connection('awsSqs').driver
     const otherDriver = driver.clone()
 
     driver.isConnected = false
@@ -57,14 +64,14 @@ export class VanillaDriverTest {
 
   @Test()
   public async shouldBeAbleToGetDriverClient({ assert }: Context) {
-    const client = Queue.connection('vanilla').driver.getClient()
+    const client = Queue.connection('awsSqs').driver.getClient()
 
     assert.isDefined(client)
   }
 
   @Test()
   public async shouldBeAbleToSetDifferentClientForDriver({ assert }: Context) {
-    const driver = Queue.connection('vanilla').driver
+    const driver = Queue.connection('awsSqs').driver
 
     driver.setClient({ hello: 'world' } as any)
 
@@ -73,49 +80,35 @@ export class VanillaDriverTest {
 
   @Test()
   public async shouldBeAbleToSeeHowManyJobsAreInsideTheQueue({ assert }: Context) {
-    const length = await Queue.connection('vanilla').length()
+    const length = await Queue.connection('awsSqs').length()
 
-    assert.deepEqual(length, 0)
+    assert.isTrue(Is.Number(length))
   }
 
   @Test()
   public async shouldBeAbleToAddJobsToTheQueue({ assert }: Context) {
-    const queue = Queue.connection('vanilla')
+    const queue = Queue.connection('awsSqs')
 
     await queue.add({ hello: 'world' })
 
-    const length = await queue.length()
     const isEmpty = await queue.isEmpty()
 
     assert.isFalse(isEmpty)
-    assert.deepEqual(length, 1)
-  }
-
-  @Test()
-  public async shouldBeAbleToAddJobsToADifferentQueue({ assert }: Context) {
-    const queue = Queue.connection('vanilla')
-
-    await queue.queue('other').add({ hello: 'world' })
-
-    const length = await queue.length()
-    const isEmpty = await queue.isEmpty()
-
-    assert.isFalse(isEmpty)
-    assert.deepEqual(length, 1)
   }
 
   @Test()
   public async shouldBeAbleToVerifyIfTheQueueIsEmpty({ assert }: Context) {
-    const queue = Queue.connection('vanilla')
+    const queue = Queue.connection('awsSqs')
 
     const isEmpty = await queue.isEmpty()
 
-    assert.isTrue(isEmpty)
+    assert.isTrue(Is.Boolean(isEmpty))
   }
 
   @Test()
+  @Skip('Peek is not supported in SQS.')
   public async shouldBeAbleToPeekTheNextJobWithoutRemovingItFromTheQueue({ assert }: Context) {
-    const queue = Queue.connection('vanilla')
+    const queue = Queue.connection('awsSqs')
 
     await queue.add({ name: 'lenon' })
 
@@ -124,25 +117,20 @@ export class VanillaDriverTest {
 
     assert.deepEqual(length, 1)
     assert.containSubset(job, {
-      status: 'pending',
-      attemptsLeft: 1,
+      attempts: 1,
       data: { name: 'lenon' }
     })
   }
 
   @Test()
   public async shouldBeAbleToPopTheNextJobRemovingItFromTheQueue({ assert }: Context) {
-    const queue = Queue.connection('vanilla')
+    const queue = Queue.connection('awsSqs')
 
     await queue.add({ name: 'lenon' })
 
     const job = await queue.pop()
-    const length = await queue.length()
 
-    assert.deepEqual(length, 0)
     assert.containSubset(job, {
-      status: 'pending',
-      attemptsLeft: 1,
       data: { name: 'lenon' }
     })
   }
@@ -151,14 +139,13 @@ export class VanillaDriverTest {
   public async shouldBeAbleToProcessTheNextJobFromTheQueueWithAProcessor({ assert }: Context) {
     assert.plan(1)
 
-    const queue = Queue.connection('vanilla')
+    const queue = Queue.connection('awsSqs')
 
     await queue.add({ name: 'lenon' })
 
     await queue.process(async job => {
       assert.containSubset(job, {
-        status: 'processing',
-        attemptsLeft: 1,
+        attempts: 1,
         queue: 'default',
         data: { name: 'lenon' }
       })
@@ -167,7 +154,7 @@ export class VanillaDriverTest {
 
   @Test()
   public async shouldBeAbleToSendTheJobToDeadletterQueueIfProcessorFails({ assert }: Context) {
-    const queue = Queue.connection('vanilla')
+    const queue = Queue.connection('awsSqs')
 
     await queue.add({ name: 'lenon' })
 
@@ -175,49 +162,46 @@ export class VanillaDriverTest {
       throw new Error('testing')
     })
 
-    const length = await queue.queue('deadletter').length()
+    const isEmpty = await queue.queue(Config.get('queue.connections.awsSqs.deadletter')).isEmpty()
 
-    assert.deepEqual(length, 1)
+    assert.isFalse(isEmpty)
   }
 
   @Test()
   public async shouldBeAbleToRetryTheJobIfBackoffIsConfiguredToQueue({ assert }: Context) {
-    const queue = Queue.connection('vanillaBackoff')
+    assert.plan(3)
+
+    const queue = Queue.connection('awsSqsBackoff')
 
     await queue.add({ name: 'lenon' })
 
-    await queue.process(async () => {
+    await queue.process(async job => {
+      assert.containSubset(job, {
+        attempts: 1,
+        data: { name: 'lenon' }
+      })
+
       throw new Error('testing')
     })
 
-    await Sleep.for(1000).milliseconds().wait()
+    await queue.process(async job => {
+      assert.containSubset(job, {
+        attempts: 0,
+        data: { name: 'lenon' }
+      })
 
-    const jobFirstAttempt = await queue.peek()
-
-    assert.containSubset(jobFirstAttempt, {
-      status: 'pending',
-      attemptsLeft: 1,
-      data: { name: 'lenon' }
-    })
-
-    await queue.process(async () => {
       throw new Error('testing')
     })
 
-    await Sleep.for(1000).milliseconds().wait()
+    const isEmpty = await queue.queue(Config.get('queue.connections.awsSqs.deadletter')).isEmpty()
 
-    const jobSecondAttempt = await queue.peek()
-
-    assert.isNull(jobSecondAttempt)
-
-    const length = await queue.queue('deadletter').length()
-
-    assert.deepEqual(length, 1)
+    assert.isFalse(isEmpty)
   }
 
   @Test()
+  @Skip('PurgeQueue can only be called every 60 seconds.')
   public async shouldBeAbleToTruncateAllJobs({ assert }: Context) {
-    const queue = Queue.connection('vanilla')
+    const queue = Queue.connection('awsSqs')
 
     await queue.add({ name: 'lenon' })
 

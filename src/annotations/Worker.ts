@@ -20,11 +20,13 @@ import type { WorkerOptions } from '#src/types'
 export function Worker(options?: WorkerOptions): ClassDecorator {
   return (target: any) => {
     options = Options.create(options, {
-      alias: `App/Workers/${target.name}`,
+      name: target.name,
+      connection: Config.get('queue.default'),
+      alias: `App/Queue/Workers/${target.name}`,
       type: 'transient'
     })
 
-    debug('Registering validator metadata for the service container %o', {
+    debug('Registering worker metadata for the service container %o', {
       ...options,
       name: target.name
     })

@@ -1,6 +1,6 @@
 {
   "name": "@athenna/queue",
-  "version": "5.9.0",
+  "version": "5.10.0",
   "description": "The Athenna queue handler.",
   "license": "MIT",
   "author": "João Lenon <lenon@athenna.io>",
@@ -49,8 +49,12 @@
     "#src": "./src/index.js",
     "#src/types": "./src/types/index.js",
     "#src/debug": "./src/debug/index.js",
+    "#src/utils": "./src/utils/index.js",
     "#tests/*": "./tests/*.js",
     "#tests": "./tests/index.js"
+  },
+  "dependencies": {
+    "@aws-sdk/client-sqs": "^3.859.0"
   },
   "devDependencies": {
     "@athenna/artisan": "^5.7.0",

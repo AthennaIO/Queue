@@ -11,31 +11,18 @@ import { Queue, QueueProvider } from '#src'
 import { Path, Sleep } from '@athenna/common'
 import { LoggerProvider } from '@athenna/logger'
 import { Test, type Context, BeforeEach, AfterEach } from '@athenna/test'
-import { Database, DatabaseImpl, DatabaseProvider } from '@athenna/database'
 
-export class DatabaseDriverTest {
+export class MemoryDriverTest {
   @BeforeEach()
   public async beforeEach() {
     await Config.loadAll(Path.fixtures('config'))
 
-    new DatabaseProvider().register()
     new QueueProvider().register()
     new LoggerProvider().register()
-
-    await Database.createTable('jobs', builder => {
-      builder.increments('id')
-      builder.string('queue').notNullable().index()
-      builder.string('data').notNullable()
-      builder.tinyint('attempts').defaultTo(1).unsigned()
-      builder.integer('availableAt').nullable().unsigned()
-      builder.integer('reservedUntil').nullable().unsigned()
-      builder.integer('createdAt').nullable().unsigned()
-    })
   }
 
   @AfterEach()
   public async afterEach() {
-    await Database.dropTable('jobs')
     await Queue.closeAll()
     ioc.reconstruct()
 
@@ -44,14 +31,14 @@ export class DatabaseDriverTest {
 
   @Test()
   public async shouldBeAbleToConnectToDriver({ assert }: Context) {
-    Queue.connection('database')
+    Queue.connection('memory')
 
     assert.isTrue(Queue.isConnected())
   }
 
   @Test()
   public async shouldBeAbleToCloseTheConnectionWithDriver({ assert }: Context) {
-    const queue = Queue.connection('database')
+    const queue = Queue.connection('memory')
 
     await queue.close()
 
@@ -60,7 +47,7 @@ export class DatabaseDriverTest {
 
   @Test()
   public async shouldBeAbleToCloneTheQueueInstance({ assert }: Context) {
-    const driver = Queue.connection('database').driver
+    const driver = Queue.connection('memory').driver
     const otherDriver = driver.clone()
 
     driver.isConnected = false
@@ -70,30 +57,30 @@ export class DatabaseDriverTest {
 
   @Test()
   public async shouldBeAbleToGetDriverClient({ assert }: Context) {
-    const client = Queue.connection('database').driver.getClient()
+    const client = Queue.connection('memory').driver.getClient()
 
-    assert.instanceOf(client, DatabaseImpl)
+    assert.isDefined(client)
   }
 
   @Test()
   public async shouldBeAbleToSetDifferentClientForDriver({ assert }: Context) {
-    const driver = Queue.connection('database').driver
+    const driver = Queue.connection('memory').driver
 
-    driver.setClient({} as any)
+    driver.setClient({ hello: 'world' } as any)
 
-    assert.notInstanceOf(driver.client, DatabaseImpl)
+    assert.deepEqual(driver.client, { hello: 'world' })
   }
 
   @Test()
   public async shouldBeAbleToSeeHowManyJobsAreInsideTheQueue({ assert }: Context) {
-    const length = await Queue.connection('database').length()
+    const length = await Queue.connection('memory').length()
 
     assert.deepEqual(length, 0)
   }
 
   @Test()
   public async shouldBeAbleToAddJobsToTheQueue({ assert }: Context) {
-    const queue = Queue.connection('database')
+    const queue = Queue.connection('memory')
 
     await queue.add({ hello: 'world' })
 
@@ -106,7 +93,7 @@ export class DatabaseDriverTest {
 
   @Test()
   public async shouldBeAbleToAddJobsToADifferentQueue({ assert }: Context) {
-    const queue = Queue.connection('database')
+    const queue = Queue.connection('memory')
 
     await queue.queue('other').add({ hello: 'world' })
 
@@ -119,7 +106,7 @@ export class DatabaseDriverTest {
 
   @Test()
   public async shouldBeAbleToVerifyIfTheQueueIsEmpty({ assert }: Context) {
-    const queue = Queue.connection('database')
+    const queue = Queue.connection('memory')
 
     const isEmpty = await queue.isEmpty()
 
@@ -128,7 +115,7 @@ export class DatabaseDriverTest {
 
   @Test()
   public async shouldBeAbleToPeekTheNextJobWithoutRemovingItFromTheQueue({ assert }: Context) {
-    const queue = Queue.connection('database')
+    const queue = Queue.connection('memory')
 
     await queue.add({ name: 'lenon' })
 
@@ -138,14 +125,13 @@ export class DatabaseDriverTest {
     assert.deepEqual(length, 1)
     assert.containSubset(job, {
       attempts: 1,
-      queue: 'default',
       data: { name: 'lenon' }
     })
   }
 
   @Test()
   public async shouldBeAbleToPopTheNextJobRemovingItFromTheQueue({ assert }: Context) {
-    const queue = Queue.connection('database')
+    const queue = Queue.connection('memory')
 
     await queue.add({ name: 'lenon' })
 
@@ -155,7 +141,6 @@ export class DatabaseDriverTest {
     assert.deepEqual(length, 0)
     assert.containSubset(job, {
       attempts: 1,
-      queue: 'default',
       data: { name: 'lenon' }
     })
   }
@@ -164,14 +149,13 @@ export class DatabaseDriverTest {
   public async shouldBeAbleToProcessTheNextJobFromTheQueueWithAProcessor({ assert }: Context) {
     assert.plan(1)
 
-    const queue = Queue.connection('database')
+    const queue = Queue.connection('memory')
 
     await queue.add({ name: 'lenon' })
 
     await queue.process(async job => {
       assert.containSubset(job, {
         attempts: 1,
-        queue: 'default',
         data: { name: 'lenon' }
       })
     })
@@ -179,7 +163,7 @@ export class DatabaseDriverTest {
 
   @Test()
   public async shouldBeAbleToSendTheJobToDeadletterQueueIfProcessorFails({ assert }: Context) {
-    const queue = Queue.connection('database')
+    const queue = Queue.connection('memory')
 
     await queue.add({ name: 'lenon' })
 
@@ -194,30 +178,32 @@ export class DatabaseDriverTest {
 
   @Test()
   public async shouldBeAbleToRetryTheJobIfBackoffIsConfiguredToQueue({ assert }: Context) {
-    assert.plan(3)
-    const queue = Queue.connection('databaseBackoff')
+    const queue = Queue.connection('memoryBackoff')
 
     await queue.add({ name: 'lenon' })
 
-    await queue.process(async job => {
-      assert.containSubset(job, {
-        attempts: 1,
-        data: { name: 'lenon' }
-      })
-
+    await queue.process(async () => {
       throw new Error('testing')
     })
 
-    await Sleep.for(2000).milliseconds().wait()
+    await Sleep.for(1500).milliseconds().wait()
 
-    await queue.process(async job => {
-      assert.containSubset(job, {
-        attempts: 0,
-        data: { name: 'lenon' }
-      })
+    const jobFirstAttempt = await queue.peek()
 
+    assert.containSubset(jobFirstAttempt, {
+      attempts: 1,
+      data: { name: 'lenon' }
+    })
+
+    await queue.process(async () => {
       throw new Error('testing')
     })
+
+    await Sleep.for(1000).milliseconds().wait()
+
+    const jobSecondAttempt = await queue.peek()
+
+    assert.isNull(jobSecondAttempt)
 
     const length = await queue.queue('deadletter').length()
 
@@ -226,7 +212,7 @@ export class DatabaseDriverTest {
 
   @Test()
   public async shouldBeAbleToTruncateAllJobs({ assert }: Context) {
-    const queue = Queue.connection('database')
+    const queue = Queue.connection('memory')
 
     await queue.add({ name: 'lenon' })
 

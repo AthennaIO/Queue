@@ -7,14 +7,17 @@
  * file that was distributed with this source code.
  */
 
-import { Worker, BaseWorker, type Context } from '#src'
+import { Worker } from '#src'
+import { constants } from '#tests/fixtures/constants/index'
 
 @Worker({
   type: 'singleton',
-  alias: 'annotatedWorker'
+  alias: 'decoratedWorker',
+  camelAlias: 'annotatedWorker'
 })
-export class AnnotatedWorker extends BaseWorker {
-  public async handle(data: Context) {
-    console.log(data)
+export class AnnotatedWorker {
+  public async handle() {
+    constants.RUN_MAP.decoratedWorker = true
+    constants.RUN_MAP.annotatedWorker = true
   }
 }

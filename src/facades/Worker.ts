@@ -7,7 +7,7 @@
  * file that was distributed with this source code.
  */
 
-export * from '#src/types/Job'
-export * from '#src/types/Context'
-export * from '#src/types/WorkerOptions'
-export * from '#src/types/ConnectionOptions'
+import { Facade } from '@athenna/ioc'
+import type { WorkerImpl } from '#src/worker/WorkerImpl'
+
+export const Worker = Facade.createFor<WorkerImpl>('Athenna/Core/Worker')

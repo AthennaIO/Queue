@@ -12,7 +12,7 @@ export default {
   |
   */
 
-  default: Env('QUEUE_CONNECTION', 'vanilla'),
+  default: Env('QUEUE_CONNECTION', 'memory'),
 
   /*
    |--------------------------------------------------------------------------
@@ -23,14 +23,21 @@ export default {
    | is used by your application. A default configuration has been added
    | for each back-end shipped with Athenna. You are free to add more.
    |
-   | Drivers: "vanilla", "database", "fake"
+   | Drivers: "memory", "database", "awsSqs", "fake"
    |
    */
 
   connections: {
-    vanilla: {
-      driver: 'vanilla',
-      queue: 'default',
+    memory: {
+      driver: 'memory',
+      queue: 'queue_name',
+      deadletter: 'deadletter_queue_name',
+      attempts: 3
+    },
+
+    awsSqs: {
+      driver: 'aws_sqs',
+      queue: 'queue_name',
       deadletter: 'deadletter_queue_name',
       attempts: 3
     },
@@ -39,7 +46,7 @@ export default {
       driver: 'database',
       table: 'jobs',
       connection: 'postgres',
-      queue: 'default',
+      queue: 'queue_name',
       deadletter: 'deadletter_queue_name',
       attempts: 3
     },

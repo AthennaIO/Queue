@@ -7,44 +7,21 @@
  * file that was distributed with this source code.
  */
 
-import { Worker, BaseWorker, type Context } from '#src'
+import { Worker, type Context } from '#src'
 import { constants } from '#tests/fixtures/constants/index'
 
-@Worker()
-export class ProductWorker extends BaseWorker {
-  public static interval() {
-    return 100
-  }
-
-  public static queue() {
-    return 'products'
-  }
-
-  public static deadletter() {
-    return 'products-deadletter'
-  }
-
-  public static attempts() {
-    return 2
-  }
-
-  public static backoff() {
-    return {
-      type: 'fixed',
-      delay: 1000,
-      jitter: 0.5
-    }
-  }
-
-  public async handle(data: Context) {
-    if (data.data.failOnAllAttempts) {
+@Worker({ connection: 'memory' })
+export class ProductWorker {
+  public async handle(ctx: Context) {
+    if (ctx.job.data.failOnAllAttempts) {
       throw new Error('testing')
     }
 
-    if (data.data.failOnFirstAttemptOnly && data.attemptsLeft >= 1) {
+    if (ctx.job.data.failOnFirstAttemptOnly && ctx.job.attempts >= 1) {
       throw new Error('testing')
     }
 
-    constants.PRODUCTS.push(data.data)
+    constants.PRODUCTS.push(ctx.job.data)
+    constants.RUN_MAP.productWorker = true
   }
 }

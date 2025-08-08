@@ -6,12 +6,12 @@ export class CreateJobsTable extends BaseMigration {
   public async up(db: DatabaseImpl) {
     return db.createTable(this.tableName, builder => {
       builder.increments('id')
-      builder.string('queue').notNullable()
-      builder.string('formerQueue').nullable()
+      builder.string('queue').notNullable().index()
       builder.string('data').notNullable()
-      builder.integer('attemptsLeft').defaultTo(1)
-      builder.enu('status', ['pending', 'processing']).defaultTo('pending')
-      builder.timestamps(true, true, true)
+      builder.tinyint('attempts').defaultTo(1).unsigned()
+      builder.integer('availableAt').nullable().unsigned()
+      builder.integer('reservedUntil').nullable().unsigned()
+      builder.integer('createdAt').nullable().unsigned()
     })
   }
 

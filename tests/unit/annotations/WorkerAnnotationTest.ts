@@ -9,9 +9,14 @@
 
 import { Annotation } from '@athenna/ioc'
 import { BaseTest } from '#tests/helpers/BaseTest'
-import { Test, type Context, Cleanup } from '@athenna/test'
+import { Test, type Context, Cleanup, AfterEach } from '@athenna/test'
 
 export default class WorkerAnnotationTest extends BaseTest {
+  @AfterEach()
+  public async afterEach() {
+    ioc.reconstruct()
+  }
+
   @Test()
   public async shouldBeAbleToPreregisterWorkersUsingWorkerAnnotation({ assert }: Context) {
     const ProductWorker = await this.import('#tests/fixtures/workers/ProductWorker')
@@ -21,13 +26,15 @@ export default class WorkerAnnotationTest extends BaseTest {
     assert.isFalse(metadata.registered)
     assert.isUndefined(metadata.camelAlias)
     assert.equal(metadata.type, 'transient')
-    assert.equal(metadata.alias, 'App/Workers/ProductWorker')
+    assert.equal(metadata.name, 'ProductWorker')
+    assert.equal(metadata.connection, 'memory')
+    assert.equal(metadata.alias, 'App/Queue/Workers/ProductWorker')
   }
 
   @Test()
   @Cleanup(() => ioc.reconstruct())
   public async shouldNotReRegisterTheWorkerAliasIfItIsAlreadyRegisteredInTheServiceContainer({ assert }: Context) {
-    ioc.singleton('App/Workers/ProductWorker', () => {})
+    ioc.singleton('App/Queue/Workers/ProductWorker', () => {})
 
     const ProductWorker = await this.import('#tests/fixtures/workers/ProductWorker')
 

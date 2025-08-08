@@ -45,12 +45,17 @@ export class QueueProviderTest {
 
     queueProvider.register()
 
-    const queue = Queue.connection('vanilla')
+    const queue = Queue.connection('memory')
 
     assert.isTrue(queue.isConnected())
 
     await queueProvider.shutdown()
 
     assert.isFalse(queue.isConnected())
+  }
+
+  @Test()
+  public async shouldNotThrowErrorIfProviderIsNotRegisteredWhenShuttingDown({ assert }: Context) {
+    await assert.doesNotReject(() => new QueueProvider().shutdown())
   }
 }

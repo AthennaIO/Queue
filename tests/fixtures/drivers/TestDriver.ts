@@ -7,6 +7,6 @@
  * file that was distributed with this source code.
  */
 
-import { VanillaDriver } from '#src'
+import { MemoryDriver } from '#src'
 
-export class TestDriver extends VanillaDriver {}
+export class TestDriver extends MemoryDriver {}

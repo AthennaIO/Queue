@@ -19,7 +19,7 @@ export class DatabaseDriver extends Driver<DatabaseImpl> {
   /**
    * Set the acked ids of the driver.
    */
-  private ackedIds = new Set<string>()
+  private static ackedIds = new Set<string>()
 
   /**
    * The `connection` database that is being used.
@@ -31,13 +31,17 @@ export class DatabaseDriver extends Driver<DatabaseImpl> {
    */
   public table: string
 
-  public constructor(con: string, client: any = null) {
-    super(con, client)
+  public constructor(
+    con: string,
+    client: any = null,
+    options?: ConnectionOptions['options']
+  ) {
+    super(con, client, options)
 
-    const { table, connection } = Config.get(`queue.connections.${con}`)
+    const config = Config.get(`queue.connections.${con}`)
 
-    this.table = table
-    this.dbConnection = connection
+    this.table = options?.table || config?.table
+    this.dbConnection = options?.connection || config?.connection
   }
 
   /**
@@ -118,10 +122,25 @@ export class DatabaseDriver extends Driver<DatabaseImpl> {
   public async add(data: unknown) {
     await this.client.table(this.table).create({
       queue: this.queueName,
-      data,
-      status: 'pending',
-      attemptsLeft: this.attempts
+      attempts: this.attempts,
+      availableAt: Date.now(),
+      reservedUntil: null,
+      createdAt: Date.now(),
+      data
     })
+  }
+
+  /**
+   * Release any job that has expired leases.
+   */
+  public async releaseExpiredLeases() {
+    const now = Date.now()
+
+    await this.client
+      .table(this.table)
+      .where('queue', this.queueName)
+      .where('reservedUntil', '<=', now)
+      .update({ reservedUntil: null })
   }
 
   /**
@@ -135,17 +154,28 @@ export class DatabaseDriver extends Driver<DatabaseImpl> {
    * ```
    */
   public async pop() {
-    const data = await this.peek()
+    const now = Date.now()
+
+    const data = await this.client
+      .table(this.table)
+      .where('queue', this.queueName)
+      .where('availableAt', '<=', now)
+      .where((qb: any) =>
+        qb.whereNull('reservedUntil').orWhere('reservedUntil', '<=', now)
+      )
+      .orderBy('availableAt', 'asc')
+      .orderBy('createdAt', 'asc')
+      .find()
 
     if (!data) {
       return null
     }
 
-    await this.client.table(this.table).where('id', data.id).delete()
-
     if (Is.Json(data.data)) {
       data.data = JSON.parse(data.data)
     }
+
+    await this.client.table(this.table).where('id', data.id).delete()
 
     return data
   }
@@ -162,10 +192,19 @@ export class DatabaseDriver extends Driver<DatabaseImpl> {
    * ```
    */
   public async peek() {
+    const now = Date.now()
+
+    await this.releaseExpiredLeases()
+
     const data = await this.client
       .table(this.table)
       .where('queue', this.queueName)
-      .latest()
+      .where('availableAt', '<=', now)
+      .where((qb: any) =>
+        qb.whereNull('reservedUntil').orWhere('reservedUntil', '<=', now)
+      )
+      .orderBy('availableAt', 'asc')
+      .orderBy('createdAt', 'asc')
       .find()
 
     if (!data) {
@@ -177,24 +216,6 @@ export class DatabaseDriver extends Driver<DatabaseImpl> {
     }
 
     return data
-  }
-
-  /**
-   * Acknowledge the job removing it from the queue.
-   *
-   * @example
-   * ```ts
-   * await Queue.ack(id)
-   * ```
-   */
-  public async ack(id: string) {
-    this.ackedIds.add(id)
-
-    await this.client
-      .table(this.table)
-      .where('id', id)
-      .where('status', 'processing')
-      .delete()
   }
 
   /**
@@ -217,6 +238,24 @@ export class DatabaseDriver extends Driver<DatabaseImpl> {
   }
 
   /**
+   * Acknowledge the job removing it from the queue.
+   *
+   * @example
+   * ```ts
+   * await Queue.ack(id)
+   * ```
+   */
+  public async ack(id: string) {
+    DatabaseDriver.ackedIds.add(id)
+
+    await this.client
+      .table(this.table)
+      .where('queue', this.queueName)
+      .where('id', id)
+      .delete()
+  }
+
+  /**
    * Verify if there are jobs on the queue.
    *
    * @example
@@ -226,12 +265,9 @@ export class DatabaseDriver extends Driver<DatabaseImpl> {
    * ```
    */
   public async isEmpty() {
-    const count = await this.client
-      .table(this.table)
-      .where('queue', this.queueName)
-      .count()
+    const length = await this.length()
 
-    return parseInt(count) <= 0
+    return length === 0
   }
 
   /**
@@ -248,77 +284,94 @@ export class DatabaseDriver extends Driver<DatabaseImpl> {
    */
   public async process(processor: (data: unknown) => any | Promise<any>) {
     const job = await this.peek()
+    const requeueJitterMs = Math.floor(Math.random() * this.workerInterval)
 
     if (!job) {
       return
     }
 
-    this.ackedIds.delete(job.id)
+    DatabaseDriver.ackedIds.delete(job.id)
 
-    job.attemptsLeft--
-    job.status = 'processing'
+    job.attempts--
+    job.reservedUntil = Date.now() + this.visibilityTimeout
 
     await this.client.table(this.table).where('id', job.id).update({
-      status: 'processing',
-      attemptsLeft: job.attemptsLeft
+      attempts: job.attempts,
+      reservedUntil: job.reservedUntil
     })
 
     try {
-      await processor(job)
+      await processor({
+        id: job.id,
+        attempts: job.attempts,
+        data: job.data
+      })
 
       /**
        * If the job still exists after processing, it means that the job was
-       * not processed for some reason, so we need to put it back the pending
-       * status.
+       * not processed for some reason, so we need to make it available again
+       * after a delay.
        */
-      if (!this.ackedIds.has(job.id)) {
-        job.status = 'pending'
+      if (!DatabaseDriver.ackedIds.has(job.id)) {
+        job.reservedUntil = null
+        job.availableAt = Date.now() + this.noAckDelayMs + requeueJitterMs
+
+        await this.client
+          .table(this.table)
+          .where('queue', this.queueName)
+          .where('id', job.id)
+          .update({
+            availableAt: job.availableAt,
+            reservedUntil: job.reservedUntil
+          })
       }
     } catch (err) {
-      const shouldRetry = job.attemptsLeft > 0
+      const shouldRetry = job.attempts > 0
 
-      await this.ack(job.id)
+      if (Config.is('worker.logger.prettifyException')) {
+        Log.channelOrVanilla('exception').error(
+          await err.toAthennaException().prettify()
+        )
+      } else {
+        Log.channelOrVanilla('exception').error({
+          msg: `failed to process job: ${err.message}`,
+          queue: this.queueName,
+          deadletter: this.deadletter,
+          name: err.name,
+          code: err.code,
+          help: err.help,
+          details: err.details,
+          metadata: err.metadata,
+          stack: err.stack,
+          job
+        })
+      }
 
-      Log.channelOrVanilla('exception').error({
-        msg: `failed to process job: ${err.message}`,
-        queue: this.queueName,
-        deadletter: this.deadletter,
-        name: err.name,
-        code: err.code,
-        help: err.help,
-        details: err.details,
-        metadata: err.metadata,
-        stack: err.stack,
-        job
-      })
+      if (!shouldRetry) {
+        await this.ack(job.id)
 
-      if (shouldRetry) {
-        job.status = 'pending'
-
-        const delay = this.calculateBackoffDelay(job.attemptsLeft)
-
-        setTimeout(async () => {
+        if (this.deadletter) {
           await this.client.table(this.table).create({
-            id: job.id,
-            queue: this.queueName,
-            status: 'pending',
-            attemptsLeft: job.attemptsLeft,
-            data: job.data
+            ...job,
+            queue: this.deadletter,
+            reservedUntil: null,
+            attempts: 0
           })
-        }, delay)
+        }
 
         return
       }
 
-      if (this.deadletter) {
-        await this.client.table(this.table).create({
-          attemptsLeft: 0,
-          queue: this.deadletter,
-          formerQueue: this.queueName,
-          status: 'pending',
-          data: job.data
+      await this.client
+        .table(this.table)
+        .where('id', job.id)
+        .update({
+          reservedUntil: null,
+          availableAt:
+            Date.now() +
+            this.calculateBackoffDelay(job.attempts) +
+            requeueJitterMs
         })
-      }
     }
   }
 }

@@ -7,12 +7,12 @@
  * file that was distributed with this source code.
  */
 
+import type { Job, ConnectionOptions } from '#src/types'
+
 export type Context<T = any> = {
-  id: string
-  data: T
-  attemptsLeft: number
-  queue: string
-  status: 'pending' | 'processing'
-  createdAt: Date
-  updatedAt: Date
+  name: string
+  connection: string
+  options: ConnectionOptions['options']
+  traceId?: string
+  job: Job<T>
 }

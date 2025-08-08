@@ -7,11 +7,10 @@
  * file that was distributed with this source code.
  */
 
-import type { Context } from '#src'
-import { BaseWorker } from '#src/workers/BaseWorker'
+import { constants } from '#tests/fixtures/constants/index'
 
-export class HelloWorker extends BaseWorker {
-  public async handle(data: Context) {
-    console.log(data)
+export class HelloWorker {
+  public async handle() {
+    constants.RUN_MAP.helloWorker = true
   }
 }

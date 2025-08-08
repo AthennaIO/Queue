@@ -1,6 +1,8 @@
-import { Worker, BaseWorker } from '@athenna/queue'
+import { Worker, type Context } from '@athenna/queue'
 
 @Worker()
-export class {{ namePascal }} extends BaseWorker {
-  public async handle(data: unknown): Promise<void> {}
+export class {{ namePascal }} {
+  public async handle(ctx: Context) {
+    //
+  }
 }
