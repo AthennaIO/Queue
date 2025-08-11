@@ -23,7 +23,7 @@ export default {
    | is used by your application. A default configuration has been added
    | for each back-end shipped with Athenna. You are free to add more.
    |
-   | Drivers: "memory", "database", "awsSqs", "fake"
+   | Drivers: "memory", "database", "aws_sqs", "fake"
    |
    */
 
@@ -35,7 +35,7 @@ export default {
       attempts: 3
     },
 
-    awsSqs: {
+    aws_sqs: {
       driver: 'aws_sqs',
       queue: 'queue_name',
       deadletter: 'deadletter_queue_name',

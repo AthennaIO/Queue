@@ -26,7 +26,7 @@ export default {
   */
 
   logger: {
-    enabled: Env('LOG_WORKER', true),
-    prettifyException: Env('LOG_PRETTY', true)
-  },
+    enabled: Env('LOG_WORKER', false),
+    prettifyException: Env('LOG_PRETTY', false)
+  }
 }
