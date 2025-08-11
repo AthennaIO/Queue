@@ -73,7 +73,7 @@ export class ConnectionFactoryTest {
 
   @Test()
   public async shouldBeAbleToFabricateNewConnectionsAndReturnAwsSqsDriverInstance({ assert }: Context) {
-    const driver = ConnectionFactory.fabricate('awsSqs')
+    const driver = ConnectionFactory.fabricate('aws_sqs')
 
     assert.instanceOf(driver, AwsSqsDriver)
   }

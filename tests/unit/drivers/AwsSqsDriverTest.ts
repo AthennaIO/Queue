@@ -38,14 +38,14 @@ export class AwsSqsDriverTest extends BaseTest {
 
   @Test()
   public async shouldBeAbleToConnectToDriver({ assert }: Context) {
-    Queue.connection('awsSqs')
+    Queue.connection('aws_sqs')
 
     assert.isTrue(Queue.isConnected())
   }
 
   @Test()
   public async shouldBeAbleToCloseTheConnectionWithDriver({ assert }: Context) {
-    const queue = Queue.connection('awsSqs')
+    const queue = Queue.connection('aws_sqs')
 
     await queue.close()
 
@@ -54,7 +54,7 @@ export class AwsSqsDriverTest extends BaseTest {
 
   @Test()
   public async shouldBeAbleToCloneTheQueueInstance({ assert }: Context) {
-    const driver = Queue.connection('awsSqs').driver
+    const driver = Queue.connection('aws_sqs').driver
     const otherDriver = driver.clone()
 
     driver.isConnected = false
@@ -64,14 +64,14 @@ export class AwsSqsDriverTest extends BaseTest {
 
   @Test()
   public async shouldBeAbleToGetDriverClient({ assert }: Context) {
-    const client = Queue.connection('awsSqs').driver.getClient()
+    const client = Queue.connection('aws_sqs').driver.getClient()
 
     assert.isDefined(client)
   }
 
   @Test()
   public async shouldBeAbleToSetDifferentClientForDriver({ assert }: Context) {
-    const driver = Queue.connection('awsSqs').driver
+    const driver = Queue.connection('aws_sqs').driver
 
     driver.setClient({ hello: 'world' } as any)
 
@@ -80,14 +80,14 @@ export class AwsSqsDriverTest extends BaseTest {
 
   @Test()
   public async shouldBeAbleToSeeHowManyJobsAreInsideTheQueue({ assert }: Context) {
-    const length = await Queue.connection('awsSqs').length()
+    const length = await Queue.connection('aws_sqs').length()
 
     assert.isTrue(Is.Number(length))
   }
 
   @Test()
   public async shouldBeAbleToAddJobsToTheQueue({ assert }: Context) {
-    const queue = Queue.connection('awsSqs')
+    const queue = Queue.connection('aws_sqs')
 
     await queue.add({ hello: 'world' })
 
@@ -98,7 +98,7 @@ export class AwsSqsDriverTest extends BaseTest {
 
   @Test()
   public async shouldBeAbleToVerifyIfTheQueueIsEmpty({ assert }: Context) {
-    const queue = Queue.connection('awsSqs')
+    const queue = Queue.connection('aws_sqs')
 
     const isEmpty = await queue.isEmpty()
 
@@ -108,7 +108,7 @@ export class AwsSqsDriverTest extends BaseTest {
   @Test()
   @Skip('Peek is not supported in SQS.')
   public async shouldBeAbleToPeekTheNextJobWithoutRemovingItFromTheQueue({ assert }: Context) {
-    const queue = Queue.connection('awsSqs')
+    const queue = Queue.connection('aws_sqs')
 
     await queue.add({ name: 'lenon' })
 
@@ -124,7 +124,7 @@ export class AwsSqsDriverTest extends BaseTest {
 
   @Test()
   public async shouldBeAbleToPopTheNextJobRemovingItFromTheQueue({ assert }: Context) {
-    const queue = Queue.connection('awsSqs')
+    const queue = Queue.connection('aws_sqs')
 
     await queue.add({ name: 'lenon' })
 
@@ -139,7 +139,7 @@ export class AwsSqsDriverTest extends BaseTest {
   public async shouldBeAbleToProcessTheNextJobFromTheQueueWithAProcessor({ assert }: Context) {
     assert.plan(1)
 
-    const queue = Queue.connection('awsSqs')
+    const queue = Queue.connection('aws_sqs')
 
     await queue.add({ name: 'lenon' })
 
@@ -154,7 +154,7 @@ export class AwsSqsDriverTest extends BaseTest {
 
   @Test()
   public async shouldBeAbleToSendTheJobToDeadletterQueueIfProcessorFails({ assert }: Context) {
-    const queue = Queue.connection('awsSqs')
+    const queue = Queue.connection('aws_sqs')
 
     await queue.add({ name: 'lenon' })
 
@@ -162,7 +162,7 @@ export class AwsSqsDriverTest extends BaseTest {
       throw new Error('testing')
     })
 
-    const isEmpty = await queue.queue(Config.get('queue.connections.awsSqs.deadletter')).isEmpty()
+    const isEmpty = await queue.queue(Config.get('queue.connections.aws_sqs.deadletter')).isEmpty()
 
     assert.isFalse(isEmpty)
   }
@@ -193,7 +193,7 @@ export class AwsSqsDriverTest extends BaseTest {
       throw new Error('testing')
     })
 
-    const isEmpty = await queue.queue(Config.get('queue.connections.awsSqs.deadletter')).isEmpty()
+    const isEmpty = await queue.queue(Config.get('queue.connections.aws_sqs.deadletter')).isEmpty()
 
     assert.isFalse(isEmpty)
   }
@@ -201,7 +201,7 @@ export class AwsSqsDriverTest extends BaseTest {
   @Test()
   @Skip('PurgeQueue can only be called every 60 seconds.')
   public async shouldBeAbleToTruncateAllJobs({ assert }: Context) {
-    const queue = Queue.connection('awsSqs')
+    const queue = Queue.connection('aws_sqs')
 
     await queue.add({ name: 'lenon' })
 
