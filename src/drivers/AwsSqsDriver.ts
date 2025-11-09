@@ -142,20 +142,20 @@ export class AwsSqsDriver extends Driver<SQSClient> {
     }
 
     let sqsClientOptions: any = {
-        region: this.region,
-        credentials: {
-            accessKeyId: this.awsAccessKeyId,
-            secretAccessKey: this.awsSecretAccessKey
-        }
-    } 
+      region: this.region,
+      credentials: {
+        accessKeyId: this.awsAccessKeyId,
+        secretAccessKey: this.awsSecretAccessKey
+      }
+    }
 
     /**
      * If the AWS_SESSION_TOKEN is set, it means that the session is running inside
      * AWS. In this case, we can't set any options to SQSClient, otherwise the client
      * will fail to authenticate.
      */
-    if (Env('AWS_SESSION_TOKEN')) {
-        sqsClientOptions = {}
+    if (Is.Undefined(this.awsAccessKeyId) || Env('AWS_SESSION_TOKEN')) {
+      sqsClientOptions = {}
     }
 
     this.client = new SQSClient(sqsClientOptions)
