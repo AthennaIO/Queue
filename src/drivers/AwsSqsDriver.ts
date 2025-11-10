@@ -153,8 +153,11 @@ export class AwsSqsDriver extends Driver<SQSClient> {
      * If the AWS_SESSION_TOKEN is set, it means that the session is running inside
      * AWS. In this case, we can't set any options to SQSClient, otherwise the client
      * will fail to authenticate.
+     *
+     * Also if accessKeyId or secretAccessKey is not defined, we should also not set
+     * the credentials options and let the SDK try to solve the authentication.
      */
-    if (Is.Undefined(this.awsAccessKeyId) || Env('AWS_SESSION_TOKEN')) {
+    if (!Is.Defined(this.awsAccessKeyId) || Env('AWS_SESSION_TOKEN')) {
       sqsClientOptions = {}
     }
 
