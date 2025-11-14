@@ -91,9 +91,11 @@ export class AwsSqsDriverTest extends BaseTest {
 
     await queue.add({ hello: 'world' })
 
-    const isEmpty = await queue.isEmpty()
+    const job = await queue.pop()
 
-    assert.isFalse(isEmpty)
+    assert.containSubset(job, {
+      data: { hello: 'world' }
+    })
   }
 
   @Test()
