@@ -16,6 +16,13 @@ export type WorkerOptions = {
   name?: string
 
   /**
+   * Define how much instances of the same worker could run in parallel.
+   *
+   * @default 1
+   */
+  concurrency?: number
+
+  /**
    * The queue connection that will be used to get the configurations.
    *
    * @default Config.get('queue.default')
