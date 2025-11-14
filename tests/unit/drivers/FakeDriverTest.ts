@@ -23,7 +23,9 @@ export class FakeDriverTest {
 
   @AfterEach()
   public async afterEach() {
+    await Queue.connection('fake').truncate()
     await Queue.closeAll()
+
     ioc.reconstruct()
 
     Config.clear()

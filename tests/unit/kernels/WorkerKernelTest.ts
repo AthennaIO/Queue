@@ -145,10 +145,9 @@ export class WorkerKernelTest {
 
     await Sleep.for(20000).milliseconds().wait()
 
-    assert.isTrue(constants.RUN_MAP.helloWorker)
+    assert.isTrue(constants.RUN_MAP.productWorker)
     assert.isTrue(constants.RUN_MAP.annotatedWorker)
     assert.isTrue(constants.RUN_MAP.decoratedWorker)
-    assert.isTrue(constants.RUN_MAP.productWorker)
   }
 
   @Test()

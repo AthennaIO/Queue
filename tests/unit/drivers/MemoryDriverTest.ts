@@ -23,7 +23,10 @@ export class MemoryDriverTest {
 
   @AfterEach()
   public async afterEach() {
+    await Queue.connection('memory').truncate()
+    await Queue.connection('memoryBackoff').truncate()
     await Queue.closeAll()
+
     ioc.reconstruct()
 
     Config.clear()
