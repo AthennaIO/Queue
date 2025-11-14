@@ -33,11 +33,6 @@ export class WorkerTaskBuilder {
     connection?: string
 
     /**
-     * The interval instance of the worker task.
-     */
-    interval?: NodeJS.Timeout
-
-    /**
      * Define if the worker task is registered.
      */
     isRegistered?: boolean
@@ -51,11 +46,6 @@ export class WorkerTaskBuilder {
      * The handler of the worker task.
      */
     handler?: (ctx: Context) => any | Promise<any>
-
-    /**
-     * Define if the worker task is running.
-     */
-    isRunning?: boolean
   } = {}
 
   private timers: NodeJS.Timeout[] = []

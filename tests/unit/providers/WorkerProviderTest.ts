@@ -45,7 +45,14 @@ export class WorkerProviderTest {
     new QueueProvider().register()
     new WorkerProvider().register()
 
-    assert.lengthOf(Queue.worker().getWorkerTasks(), 0)
+    new QueueProvider().shutdown()
+    new WorkerProvider().shutdown()
+
+    assert.isTrue(
+      Queue.worker()
+        .getWorkerTasks()
+        .every(worker => worker.worker.isRegistered === false)
+    )
   }
 
   @Test()
