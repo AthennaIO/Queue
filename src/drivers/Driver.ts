@@ -129,7 +129,20 @@ export abstract class Driver<Client = any> {
   }
 
   /**
-   * Calculate the backoff delay.
+   * Calculate the heartbeat delay. Used to define if job is still
+   * running.
+   */
+  public calculateHeartbeatDelay() {
+    if (!this.visibilityTimeout) {
+      return 0
+    }
+
+    return Math.max(5_000, Math.floor(this.visibilityTimeout * 0.8))
+  }
+
+  /**
+   * Calculate the backoff delay. Used to define the retry delays when
+   * a job fails processing.
    */
   public calculateBackoffDelay(attempts: number) {
     if (!this.backoff) {

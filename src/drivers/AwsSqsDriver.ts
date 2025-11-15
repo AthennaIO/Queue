@@ -387,12 +387,42 @@ export class AwsSqsDriver extends Driver<SQSClient> {
 
     AwsSqsDriver.ackedIds.delete(job.id)
 
+    const heartbeatDelay = this.calculateHeartbeatDelay()
+
+    let heartbeatTimeout: NodeJS.Timeout
+
+    const startHeartbeat = () => {
+      if (heartbeatDelay <= 0) {
+        return
+      }
+
+      heartbeatTimeout = setInterval(() => {
+        this.changeJobVisibility(
+          job.id,
+          this.msToS(this.visibilityTimeout)
+        ).catch(() => {})
+      }, heartbeatDelay)
+    }
+
+    const stopHeartbeat = () => {
+      if (!heartbeatTimeout) {
+        return
+      }
+
+      clearInterval(heartbeatTimeout)
+      heartbeatTimeout = undefined
+    }
+
     try {
+      startHeartbeat()
+
       await processor({
         id: job.id,
         attempts: job.attempts,
         data: job.data
       })
+
+      stopHeartbeat()
 
       if (!AwsSqsDriver.ackedIds.has(job.id)) {
         await this.changeJobVisibility(
@@ -401,6 +431,8 @@ export class AwsSqsDriver extends Driver<SQSClient> {
         )
       }
     } catch (err) {
+      stopHeartbeat()
+
       const receiveCount = Number(
         job.metadata.Attributes?.ApproximateReceiveCount ?? '1'
       )

@@ -283,22 +283,53 @@ export class DatabaseDriver extends Driver<DatabaseImpl> {
    * ```
    */
   public async process(processor: (data: unknown) => any | Promise<any>) {
-    const job = await this.peek()
+    await this.releaseExpiredLeases()
+
+    const now = Date.now()
     const requeueJitterMs = Math.floor(Math.random() * this.workerInterval)
+
+    const job = await this.client
+      .table(this.table)
+      .where('queue', this.queueName)
+      .where('availableAt', '<=', now)
+      .where((qb: any) =>
+        qb.whereNull('reservedUntil').orWhere('reservedUntil', '<=', now)
+      )
+      .orderBy('availableAt', 'asc')
+      .orderBy('createdAt', 'asc')
+      .find()
 
     if (!job) {
       return
     }
 
-    DatabaseDriver.ackedIds.delete(job.id)
+    if (Is.Json(job.data)) {
+      job.data = JSON.parse(job.data)
+    }
 
     job.attempts--
     job.reservedUntil = Date.now() + this.visibilityTimeout
 
-    await this.client.table(this.table).where('id', job.id).update({
-      attempts: job.attempts,
-      reservedUntil: job.reservedUntil
-    })
+    /**
+     * Trying to claim the job for this worker.
+     */
+    const updatedJob = await this.client
+      .table(this.table)
+      .where('id', job.id)
+      .where('queue', this.queueName)
+      .where((qb: any) =>
+        qb.whereNull('reservedUntil').orWhere('reservedUntil', '<=', now)
+      )
+      .update({ attempts: job.attempts, reservedUntil: job.reservedUntil })
+
+    /**
+     * If job is not updated, it means another worker has claimed the job.
+     */
+    if (!updatedJob) {
+      return
+    }
+
+    DatabaseDriver.ackedIds.delete(job.id)
 
     try {
       await processor({

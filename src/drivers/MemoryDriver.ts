@@ -244,8 +244,16 @@ export class MemoryDriver extends Driver {
    * ```
    */
   public async process(processor: (data: unknown) => any | Promise<any>) {
-    const job = await this.peek()
+    this.defineQueue()
+
+    await this.releaseExpiredLeases()
+
+    const now = Date.now()
     const requeueJitterMs = Math.floor(Math.random() * this.workerInterval)
+
+    const job = this.client.queues[this.queueName].find(j => {
+      return j.availableAt <= now && !j.reservedUntil
+    })
 
     if (!job) {
       return
