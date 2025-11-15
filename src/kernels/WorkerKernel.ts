@@ -7,15 +7,6 @@
  * file that was distributed with this source code.
  */
 
-/**
- * @athenna/http
- *
- * (c) João Lenon <lenon@athenna.io>
- *
- * For the full copyright and license information, please view the LICENSE
- * file that was distributed with this source code.
- */
-
 import 'reflect-metadata'
 
 import { debug } from '#src/debug'
@@ -130,6 +121,10 @@ export class WorkerKernel {
 
     if (meta.camelAlias) {
       ioc.alias(meta.camelAlias, meta.alias)
+    }
+
+    if (meta.concurrency) {
+      builder.concurrency(meta.concurrency)
     }
 
     builder.connection(meta.connection).handler(ctx => {

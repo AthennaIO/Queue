@@ -7,12 +7,13 @@
  * file that was distributed with this source code.
  */
 
-import { Is } from '@athenna/common'
 import { Log } from '@athenna/logger'
 import { Queue } from '#src/facades/Queue'
+import { Is, Parser } from '@athenna/common'
 import { WorkerImpl } from '#src/worker/WorkerImpl'
 import type { Context, ConnectionOptions } from '#src/types'
 import type { WorkerHandler } from '#src/types/WorkerHandler'
+import { WorkerTimeoutException } from '#src/exceptions/WorkerTimeoutException'
 
 export class WorkerTaskBuilder {
   public worker: {
@@ -22,14 +23,14 @@ export class WorkerTaskBuilder {
     name?: string
 
     /**
+     * Define the maximun number of concurrent processes of the same worker.
+     */
+    concurrency?: number
+
+    /**
      * The queue connection of the worker task.
      */
     connection?: string
-
-    /**
-     * The interval instance of the worker task.
-     */
-    interval?: NodeJS.Timeout
 
     /**
      * Define if the worker task is registered.
@@ -45,12 +46,9 @@ export class WorkerTaskBuilder {
      * The handler of the worker task.
      */
     handler?: (ctx: Context) => any | Promise<any>
-
-    /**
-     * Define if the worker task is running.
-     */
-    isRunning?: boolean
   } = {}
+
+  private timers: NodeJS.Timeout[] = []
 
   public constructor() {
     this.worker.connection = Config.get('queue.default')
@@ -66,6 +64,20 @@ export class WorkerTaskBuilder {
    */
   public name(name: string) {
     this.worker.name = name
+
+    return this
+  }
+
+  /**
+   * Set the max number of concurrent worker tasks.
+   *
+   * @example
+   * ```ts
+   * new WorkerTaskBuilder().name('my_worker_task').concurrency(5)
+   * ```
+   */
+  public concurrency(concurrency: number) {
+    this.worker.concurrency = concurrency
 
     return this
   }
@@ -208,6 +220,21 @@ export class WorkerTaskBuilder {
       return
     }
 
+    if (this.timers.length) {
+      return
+    }
+
+    const n = this.worker.concurrency ?? 1
+
+    for (let i = 0; i < n; i++) {
+      this.spawn()
+    }
+  }
+
+  /**
+   * Use spawn to force a worker instance to run.
+   */
+  private spawn() {
     const intervalToRun =
       this.worker.options?.workerInterval ||
       Config.get(
@@ -215,18 +242,40 @@ export class WorkerTaskBuilder {
         1000
       )
 
+    const timeoutMs =
+      this.worker.options?.workerTimeoutMs ??
+      Config.get(
+        `queue.connections.${this.worker.connection}.workerTimeoutMs`,
+        Parser.timeToMs('5m')
+      )
+
     const initialOffset = this.computeInitialOffset(intervalToRun)
 
-    this.worker.interval = setTimeout(async () => {
-      if (!this.worker.isRunning) {
-        this.worker.isRunning = true
-
-        await this.run()
-        this.worker.isRunning = false
+    const loop = async () => {
+      if (!this.worker.isRegistered) {
+        return
       }
 
-      this.scheduleNext(intervalToRun)
-    }, initialOffset)
+      try {
+        await Promise.race([
+          this.run(),
+          new Promise((resolve, reject) =>
+            setTimeout(
+              () => reject(new WorkerTimeoutException(this.worker.name)),
+              timeoutMs
+            )
+          )
+        ])
+      } catch (err) {
+        Log.channelOrVanilla('exception').error(err)
+      } finally {
+        const delay = intervalToRun + this.computeJitter(intervalToRun)
+
+        this.timers.push(setTimeout(loop, delay))
+      }
+    }
+
+    this.timers.push(setTimeout(loop, initialOffset))
   }
 
   /**
@@ -242,17 +291,11 @@ export class WorkerTaskBuilder {
       return
     }
 
-    if (!this.worker.interval) {
-      return
-    }
-
     this.worker.isRegistered = false
-    this.worker.isRunning = false
 
-    if (this.worker.interval) {
-      clearTimeout(this.worker.interval)
-      this.worker.interval = undefined
-    }
+    this.timers.forEach(t => clearTimeout(t))
+
+    this.timers = []
   }
 
   /**
@@ -303,30 +346,5 @@ export class WorkerTaskBuilder {
     }
 
     return Math.floor(Math.random() * (max + 1))
-  }
-
-  /**
-   * Schedule the next worker task.
-   */
-  private scheduleNext(baseMs: number) {
-    if (!this.worker.isRegistered) {
-      return
-    }
-
-    const delay = baseMs + this.computeJitter(baseMs)
-
-    this.worker.interval = setTimeout(async () => {
-      if (this.worker.isRunning) {
-        return this.scheduleNext(baseMs)
-      }
-
-      this.worker.isRunning = true
-
-      await this.run()
-
-      this.worker.isRunning = false
-
-      this.scheduleNext(baseMs)
-    }, delay)
   }
 }

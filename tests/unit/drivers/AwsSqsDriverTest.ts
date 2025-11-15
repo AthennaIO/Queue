@@ -11,8 +11,8 @@ import { Is, Path } from '@athenna/common'
 import { EnvHelper } from '@athenna/config'
 import { LoggerProvider } from '@athenna/logger'
 import { BaseTest } from '#tests/helpers/BaseTest'
-import { Queue, QueueProvider, WorkerProvider } from '#src'
-import { Test, type Context, BeforeEach, AfterEach, Skip } from '@athenna/test'
+import { Queue, WorkerProvider, QueueProvider } from '#src'
+import { Test, type Context, BeforeEach, AfterEach, Skip, AfterAll } from '@athenna/test'
 
 export class AwsSqsDriverTest extends BaseTest {
   @BeforeEach()
@@ -27,6 +27,25 @@ export class AwsSqsDriverTest extends BaseTest {
 
   @AfterEach()
   public async afterEach() {
+    await Queue.closeAll()
+
+    Queue.worker().close()
+
+    ioc.reconstruct()
+
+    Config.clear()
+  }
+
+  @AfterAll()
+  public async afterAll() {
+    await Config.loadAll(Path.fixtures('config'))
+
+    new QueueProvider().register()
+    new WorkerProvider().register()
+    new LoggerProvider().register()
+
+    await Queue.connection('aws_sqs').truncate().catch()
+
     await Queue.closeAll()
 
     Queue.worker().close()
@@ -91,9 +110,11 @@ export class AwsSqsDriverTest extends BaseTest {
 
     await queue.add({ hello: 'world' })
 
-    const isEmpty = await queue.isEmpty()
+    const job = await queue.pop()
 
-    assert.isFalse(isEmpty)
+    assert.containSubset(job, {
+      data: { hello: 'world' }
+    })
   }
 
   @Test()
