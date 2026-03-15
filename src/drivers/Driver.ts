@@ -151,7 +151,7 @@ export abstract class Driver<Client = any> {
 
     let { type, delay, jitter } = this.backoff
 
-    if (jitter < 0) {
+    if (!jitter || jitter < 0) {
       jitter = 0
     }
 
