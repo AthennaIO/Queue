@@ -26,6 +26,10 @@ export class MemoryDriverExceptionHandler extends ExceptionHandler {
   }: MemoryDriverExceptionHandlerContext) {
     const shouldRetry = job.attempts > 0
 
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore
+    await super.handle({ job, error, driver, requeueJitterMs })
+
     job.reservedUntil = null
 
     if (Config.is('worker.logger.enabled', true)) {
