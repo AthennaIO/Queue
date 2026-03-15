@@ -7,11 +7,11 @@
  * file that was distributed with this source code.
  */
 
-import { Log } from '@athenna/logger'
 import { Driver } from '#src/drivers/Driver'
 import { Options, Uuid } from '@athenna/common'
 import type { ConnectionOptions } from '#src/types'
 import { ConnectionFactory } from '#src/factories/ConnectionFactory'
+import { MemoryDriverExceptionHandler } from '#src/handlers/MemoryDriverExceptionHandler'
 
 export class MemoryDriver extends Driver {
   /**
@@ -280,47 +280,13 @@ export class MemoryDriver extends Driver {
         job.reservedUntil = null
         job.availableAt = Date.now() + this.noAckDelayMs + requeueJitterMs
       }
-    } catch (err) {
-      const shouldRetry = job.attempts > 0
-
-      job.reservedUntil = null
-
-      if (Config.is('worker.logger.prettifyException')) {
-        Log.channelOrVanilla('exception').error(
-          await err.toAthennaException().prettify()
-        )
-      } else {
-        Log.channelOrVanilla('exception').error({
-          msg: `failed to process job: ${err.message}`,
-          queue: this.queueName,
-          deadletter: this.deadletter,
-          name: err.name,
-          code: err.code,
-          help: err.help,
-          details: err.details,
-          metadata: err.metadata,
-          stack: err.stack,
-          job
-        })
-      }
-
-      if (shouldRetry) {
-        job.availableAt =
-          Date.now() +
-          this.calculateBackoffDelay(job.attempts) +
-          requeueJitterMs
-
-        return
-      }
-
-      await this.ack(job.id)
-
-      if (this.deadletter) {
-        this.client.queues[this.deadletter].push({
-          ...job,
-          attempts: 0
-        })
-      }
+    } catch (error) {
+      await new MemoryDriverExceptionHandler().handle({
+        job,
+        error,
+        driver: this,
+        requeueJitterMs
+      })
     }
   }
 }

@@ -17,12 +17,12 @@ import {
   ChangeMessageVisibilityCommand
 } from '@aws-sdk/client-sqs'
 
-import { Log } from '@athenna/logger'
 import { createHash } from 'node:crypto'
 import { Driver } from '#src/drivers/Driver'
 import { Is, Options, Uuid } from '@athenna/common'
 import type { ConnectionOptions } from '#src/types'
 import { ConnectionFactory } from '#src/factories/ConnectionFactory'
+import { AwsSqsDriverExceptionHandler } from '#src/handlers/AwsSqsDriverExceptionHandler'
 import { NotFifoSqsQueueTypeException } from '#src/exceptions/NotFifoSqsQueueTypeException'
 
 export class AwsSqsDriver extends Driver<SQSClient> {
@@ -39,7 +39,7 @@ export class AwsSqsDriver extends Driver<SQSClient> {
   /**
    * Convert milliseconds to seconds.
    */
-  private msToS(v: number) {
+  public msToS(v: number) {
     const s = Math.ceil(v / 1000)
     return Math.max(0, Math.min(43200, s))
   }
@@ -430,57 +430,21 @@ export class AwsSqsDriver extends Driver<SQSClient> {
           this.msToS(this.noAckDelayMs + requeueJitterMs)
         )
       }
-    } catch (err) {
-      stopHeartbeat()
-
-      const receiveCount = Number(
-        job.metadata.Attributes?.ApproximateReceiveCount ?? '1'
-      )
-      const attempts = Math.max(this.attempts - receiveCount, 0)
-      const shouldRetry = attempts > 0
-
-      if (Config.is('worker.logger.prettifyException')) {
-        Log.channelOrVanilla('exception').error(
-          await err.toAthennaException().prettify()
-        )
-      } else {
-        Log.channelOrVanilla('exception').error({
-          msg: `failed to process job: ${err.message}`,
-          queue: this.queueName,
-          deadletter: this.deadletter,
-          name: err.name,
-          code: err.code,
-          help: err.help,
-          details: err.details,
-          metadata: err.metadata,
-          stack: err.stack,
-          job
-        })
-      }
-
-      if (shouldRetry) {
-        const delay = this.calculateBackoffDelay(job.attempts)
-
-        await this.changeJobVisibility(
-          job.id,
-          this.msToS(delay + requeueJitterMs)
-        )
-
-        return
-      }
-
-      if (this.deadletter) {
-        await this.sendJobToDLQ(job)
-      }
-
-      await this.ack(job.id)
+    } catch (error) {
+      await new AwsSqsDriverExceptionHandler().handle({
+        job,
+        error,
+        driver: this,
+        stopHeartbeat,
+        requeueJitterMs
+      })
     }
   }
 
   /**
    * Send a job to the deadletter quue.
    */
-  private async sendJobToDLQ(job: any) {
+  public async sendJobToDLQ(job: any) {
     if (Is.Object(job.data)) {
       job.data = JSON.stringify(job.data)
     }
@@ -503,7 +467,7 @@ export class AwsSqsDriver extends Driver<SQSClient> {
   /**
    * Change the job visibility values in SQS.
    */
-  private async changeJobVisibility(id: string, seconds: number) {
+  public async changeJobVisibility(id: string, seconds: number) {
     const cmd = new ChangeMessageVisibilityCommand({
       QueueUrl: this.queueName,
       ReceiptHandle: id,
