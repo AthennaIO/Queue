@@ -7,13 +7,13 @@
  * file that was distributed with this source code.
  */
 
-import { Log } from '@athenna/logger'
 import { Config } from '@athenna/config'
 import { Driver } from '#src/drivers/Driver'
 import { Is, Options } from '@athenna/common'
 import type { ConnectionOptions } from '#src/types'
 import type { DatabaseImpl } from '@athenna/database'
 import { ConnectionFactory } from '#src/factories/ConnectionFactory'
+import { DatabaseDriverExceptionHandler } from '#src/handlers/DatabaseDriverExceptionHandler'
 
 export class DatabaseDriver extends Driver<DatabaseImpl> {
   /**
@@ -229,12 +229,7 @@ export class DatabaseDriver extends Driver<DatabaseImpl> {
    * ```
    */
   public async length() {
-    const count = await this.client
-      .table(this.table)
-      .where('queue', this.queueName)
-      .count()
-
-    return parseInt(count)
+    return this.client.table(this.table).where('queue', this.queueName).count()
   }
 
   /**
@@ -356,53 +351,13 @@ export class DatabaseDriver extends Driver<DatabaseImpl> {
             reservedUntil: job.reservedUntil
           })
       }
-    } catch (err) {
-      const shouldRetry = job.attempts > 0
-
-      if (Config.is('worker.logger.prettifyException')) {
-        Log.channelOrVanilla('exception').error(
-          await err.toAthennaException().prettify()
-        )
-      } else {
-        Log.channelOrVanilla('exception').error({
-          msg: `failed to process job: ${err.message}`,
-          queue: this.queueName,
-          deadletter: this.deadletter,
-          name: err.name,
-          code: err.code,
-          help: err.help,
-          details: err.details,
-          metadata: err.metadata,
-          stack: err.stack,
-          job
-        })
-      }
-
-      if (!shouldRetry) {
-        await this.ack(job.id)
-
-        if (this.deadletter) {
-          await this.client.table(this.table).create({
-            ...job,
-            queue: this.deadletter,
-            reservedUntil: null,
-            attempts: 0
-          })
-        }
-
-        return
-      }
-
-      await this.client
-        .table(this.table)
-        .where('id', job.id)
-        .update({
-          reservedUntil: null,
-          availableAt:
-            Date.now() +
-            this.calculateBackoffDelay(job.attempts) +
-            requeueJitterMs
-        })
+    } catch (error) {
+      await new DatabaseDriverExceptionHandler().handle({
+        job,
+        error,
+        driver: this,
+        requeueJitterMs
+      })
     }
   }
 }

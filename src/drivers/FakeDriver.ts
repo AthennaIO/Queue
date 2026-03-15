@@ -217,6 +217,14 @@ export class FakeDriver {
   public static async ack() {}
 
   /**
+   * Calculate the heartbeat delay. Used to define if job is still
+   * running.
+   */
+  public static calculateHeartbeatDelay() {
+    return 0
+  }
+
+  /**
    * Process the next job of the queue with a handler.
    *
    * @example

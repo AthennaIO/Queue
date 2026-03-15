@@ -50,8 +50,7 @@ export default {
       attempts: 2,
       backoff: {
         type: 'fixed',
-        delay: 1000,
-        jitter: 0.5
+        delay: 1000
       }
     },
 
@@ -70,8 +69,7 @@ export default {
       attempts: 2,
       backoff: {
         type: 'fixed',
-        delay: 1000,
-        jitter: 0.5
+        delay: 1000
       }
     },
 
@@ -92,8 +90,7 @@ export default {
       attempts: 2,
       backoff: {
         type: 'fixed',
-        delay: 1000,
-        jitter: 0.5
+        delay: 1000
       }
     },
 
