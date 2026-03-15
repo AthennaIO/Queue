@@ -34,6 +34,10 @@ export class AwsSqsDriverExceptionHandler extends ExceptionHandler {
     const attempts = Math.max(driver.attempts - receiveCount, 0)
     const shouldRetry = attempts > 0
 
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore
+    await super.handle({ job, error, driver, stopHeartbeat, requeueJitterMs })
+
     if (Config.is('worker.logger.enabled', true)) {
       if (Config.is('worker.logger.prettifyException')) {
         Log.channelOrVanilla('exception').error(
