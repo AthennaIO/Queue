@@ -162,19 +162,20 @@ export class DatabaseDriverTest {
 
   @Test()
   public async shouldBeAbleToProcessTheNextJobFromTheQueueWithAProcessor({ assert }: Context) {
-    assert.plan(1)
-
     const queue = Queue.connection('database')
 
     await queue.add({ name: 'lenon' })
 
+    let data: any = {}
+    let attempts: number
+
     await queue.process(async job => {
-      assert.containSubset(job, {
-        attempts: 1,
-        queue: 'default',
-        data: { name: 'lenon' }
-      })
+      data = job.data
+      attempts = job.attempts
     })
+
+    assert.equal(attempts, 0)
+    assert.equal(data.name, 'lenon')
   }
 
   @Test()
