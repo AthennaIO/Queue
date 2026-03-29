@@ -1,6 +1,6 @@
 {
   "name": "@athenna/queue",
-  "version": "5.20.0",
+  "version": "5.21.0",
   "description": "The Athenna queue handler.",
   "license": "MIT",
   "author": "João Lenon <lenon@athenna.io>",
