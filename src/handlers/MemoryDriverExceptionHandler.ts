@@ -32,25 +32,23 @@ export class MemoryDriverExceptionHandler extends ExceptionHandler {
 
     job.reservedUntil = null
 
-    if (Config.is('worker.logger.enabled', true)) {
-      if (Config.is('worker.logger.prettifyException')) {
-        Log.channelOrVanilla('exception').error(
-          await error.toAthennaException().prettify()
-        )
-      } else {
-        Log.channelOrVanilla('exception').error({
-          msg: `failed to process job: ${error.message}`,
-          queue: driver.queueName,
-          deadletter: driver.deadletter,
-          name: error.name,
-          code: error.code,
-          help: error.help,
-          details: error.details,
-          metadata: error.metadata,
-          stack: error.stack,
-          job
-        })
-      }
+    if (Config.is('worker.logger.prettifyException')) {
+      Log.channelOrVanilla('exception').error(
+        await error.toAthennaException().prettify()
+      )
+    } else {
+      Log.channelOrVanilla('exception').error({
+        msg: `failed to process job: ${error.message}`,
+        queue: driver.queueName,
+        deadletter: driver.deadletter,
+        name: error.name,
+        code: error.code,
+        help: error.help,
+        details: error.details,
+        metadata: error.metadata,
+        stack: error.stack,
+        job
+      })
     }
 
     if (shouldRetry) {
