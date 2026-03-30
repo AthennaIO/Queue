@@ -281,7 +281,6 @@ export class MemoryDriver extends Driver {
         job.availableAt = Date.now() + this.noAckDelayMs + requeueJitterMs
       }
     } catch (error) {
-      console.log('error', error)
       await new MemoryDriverExceptionHandler().handle({
         job,
         error,
