@@ -9,11 +9,13 @@
 
 import { Log } from '@athenna/logger'
 import { Queue } from '#src/facades/Queue'
-import { Is, Parser } from '@athenna/common'
 import { WorkerImpl } from '#src/worker/WorkerImpl'
+import { Is, Module, Parser } from '@athenna/common'
 import type { Context, ConnectionOptions } from '#src/types'
 import type { WorkerHandler } from '#src/types/WorkerHandler'
 import { WorkerTimeoutException } from '#src/exceptions/WorkerTimeoutException'
+
+const otelModule = await Module.safeImport('@athenna/otel')
 
 export class WorkerTaskBuilder {
   public worker: {
@@ -23,7 +25,7 @@ export class WorkerTaskBuilder {
     name?: string
 
     /**
-     * Define the maximun number of concurrent processes of the same worker.
+     * Define the maximum number of concurrent processes of the same worker.
      */
     concurrency?: number
 
@@ -112,17 +114,23 @@ export class WorkerTaskBuilder {
     }
 
     this.worker.handler = async ctx => {
-      if (WorkerImpl.rTracerPlugin) {
-        return WorkerImpl.rTracerPlugin.runWithId(async () => {
+      const execute = async () => {
+        ctx.traceId = WorkerImpl.rTracerPlugin
+          ? WorkerImpl.rTracerPlugin.id()
+          : (ctx.traceId ?? null)
+
+        return this.runWithOtelContext(ctx, async () => {
           await handler(ctx)
 
           logIfEnabled(ctx)
         })
       }
 
-      await handler(ctx)
+      if (WorkerImpl.rTracerPlugin) {
+        return WorkerImpl.rTracerPlugin.runWithId(execute)
+      }
 
-      logIfEnabled(ctx)
+      return execute()
     }
 
     const task = WorkerImpl.tasks.find(
@@ -191,9 +199,7 @@ export class WorkerTaskBuilder {
     await queue.process(job => {
       const ctx = {
         name: this.worker.name,
-        traceId: WorkerImpl.rTracerPlugin
-          ? WorkerImpl.rTracerPlugin.id()
-          : null,
+        traceId: null,
         connection: this.worker.connection,
         options: this.worker.options,
         job
@@ -346,5 +352,16 @@ export class WorkerTaskBuilder {
     }
 
     return Math.floor(Math.random() * (max + 1))
+  }
+
+  private runWithOtelContext<T>(ctx: any, callback: () => T): T {
+    if (!Config.is('worker.otel.contextEnabled', true) || !otelModule) {
+      return callback()
+    }
+
+    return otelModule.Otel.withContext(callback, {
+      bindings: Config.get('worker.otel.contextBindings', []),
+      resolveBinding: binding => binding.resolve(ctx)
+    })
   }
 }

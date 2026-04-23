@@ -9,6 +9,7 @@
 
 import { Queue } from '#src/facades/Queue'
 import { Worker } from '#src/facades/Worker'
+import { context, createContextKey } from '@opentelemetry/api'
 import { Path, Sleep } from '@athenna/common'
 import { LoggerProvider } from '@athenna/logger'
 import { WorkerImpl } from '#src/worker/WorkerImpl'
@@ -16,13 +17,15 @@ import { WorkerKernel } from '#src/kernels/WorkerKernel'
 import { constants } from '#tests/fixtures/constants/index'
 import { QueueProvider } from '#src/providers/QueueProvider'
 import { WorkerProvider } from '#src/providers/WorkerProvider'
-import { Test, BeforeEach, AfterEach, type Context, Mock } from '@athenna/test'
+import { AsyncLocalStorageContextManager } from '@opentelemetry/context-async-hooks'
+import { Test, BeforeEach, AfterEach, type Context, Mock, Cleanup } from '@athenna/test'
 
 export class WorkerKernelTest {
   @BeforeEach()
   public async beforeEach() {
     ioc.reconstruct()
 
+    context.setGlobalContextManager(new AsyncLocalStorageContextManager().enable())
     WorkerImpl.loggerIsSet = false
     WorkerImpl.rTracerPlugin = undefined
 
@@ -35,6 +38,7 @@ export class WorkerKernelTest {
   @AfterEach()
   public async afterEach() {
     Mock.restoreAll()
+    context.disable()
 
     new WorkerProvider().shutdown()
 
@@ -83,6 +87,57 @@ export class WorkerKernelTest {
     await Sleep.for(1500).milliseconds().wait()
 
     assert.isDefined(traceId)
+  }
+
+  @Test()
+  @Cleanup(() => {
+    Config.set('worker.otel.contextEnabled', false)
+  })
+  @Cleanup(() => {
+    Config.set('worker.otel.contextBindings', [])
+  })
+  public async shouldBeAbleToRunWorkerHandlersInsideConfiguredOtelContext({ assert }: Context) {
+    const kernel = new WorkerKernel()
+    const workerNameKey = createContextKey('worker.name')
+    const workerConnectionKey = createContextKey('worker.connection')
+    let values: any = {}
+
+    Config.set('worker.otel.contextEnabled', true)
+    Config.set('worker.otel.contextBindings', [
+      { key: workerNameKey, resolve: ctx => ctx.name },
+      { key: workerConnectionKey, resolve: ctx => ctx.connection }
+    ])
+
+    await kernel.registerRTracer()
+
+    Worker.task()
+      .name('otel_worker')
+      .connection('memory')
+      .handler(ctx => {
+        values = {
+          name: context.active().getValue(workerNameKey),
+          connection: context.active().getValue(workerConnectionKey),
+          ctxConnection: ctx.connection
+        }
+      })
+
+    const task = Worker.getWorkerTaskByName('otel_worker')
+
+    await task.worker.handler({
+      name: 'otel_worker',
+      traceId: null,
+      connection: 'memory',
+      options: undefined,
+      job: {
+        id: '1',
+        attempts: 0,
+        data: { test: 1 }
+      }
+    })
+
+    assert.equal(values.name, 'otel_worker')
+    assert.equal(values.connection, values.ctxConnection)
+    assert.equal(values.connection, 'memory')
   }
 
   @Test()
