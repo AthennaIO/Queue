@@ -117,7 +117,7 @@ export class WorkerTaskBuilder {
       const execute = async () => {
         ctx.traceId = WorkerImpl.rTracerPlugin
           ? WorkerImpl.rTracerPlugin.id()
-          : (ctx.traceId ?? null)
+          : ctx.traceId ?? null
 
         return this.runWithOtelContext(ctx, async () => {
           await handler(ctx)
