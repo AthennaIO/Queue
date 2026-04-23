@@ -30,7 +30,7 @@ export class DatabaseDriverExceptionHandler extends ExceptionHandler {
     // @ts-ignore
     await super.handle({ job, error, driver, requeueJitterMs })
 
-    if (Config.is('worker.logger.enabled', false)) {
+    if (Config.is('worker.logger.enabled', true)) {
       if (Config.is('worker.logger.prettifyException')) {
         Log.channelOrVanilla('exception').error(
           await error.toAthennaException().prettify()
