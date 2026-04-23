@@ -9,13 +9,14 @@
 
 import { Queue } from '#src/facades/Queue'
 import { Worker } from '#src/facades/Worker'
-import { context, createContextKey } from '@opentelemetry/api'
+import { OtelProvider } from '@athenna/otel'
 import { Path, Sleep } from '@athenna/common'
 import { LoggerProvider } from '@athenna/logger'
 import { WorkerImpl } from '#src/worker/WorkerImpl'
 import { WorkerKernel } from '#src/kernels/WorkerKernel'
 import { constants } from '#tests/fixtures/constants/index'
 import { QueueProvider } from '#src/providers/QueueProvider'
+import { context, createContextKey } from '@opentelemetry/api'
 import { WorkerProvider } from '#src/providers/WorkerProvider'
 import { AsyncLocalStorageContextManager } from '@opentelemetry/context-async-hooks'
 import { Test, BeforeEach, AfterEach, type Context, Mock, Cleanup } from '@athenna/test'
@@ -30,6 +31,7 @@ export class WorkerKernelTest {
     WorkerImpl.rTracerPlugin = undefined
 
     await Config.loadAll(Path.fixtures('config'))
+    new OtelProvider().register()
     new LoggerProvider().register()
     new QueueProvider().register()
     new WorkerProvider().register()
@@ -40,6 +42,7 @@ export class WorkerKernelTest {
     Mock.restoreAll()
     context.disable()
 
+    await new OtelProvider().shutdown()
     new WorkerProvider().shutdown()
 
     constants.RUN_MAP.helloWorker = false
