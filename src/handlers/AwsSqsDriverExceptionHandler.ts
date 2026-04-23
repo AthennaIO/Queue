@@ -39,7 +39,7 @@ export class AwsSqsDriverExceptionHandler extends ExceptionHandler {
     await super.handle({ job, error, driver, stopHeartbeat, requeueJitterMs })
 
     if (Config.is('worker.logger.enabled', true)) {
-      if (Config.is('worker.logger.prettifyException')) {
+      if (Config.is('worker.logger.prettifyException', true)) {
         Log.channelOrVanilla('exception').error(
           await error.toAthennaException().prettify()
         )
