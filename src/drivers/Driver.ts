@@ -11,6 +11,17 @@ import { Utils } from '#src/utils'
 import { Config } from '@athenna/config'
 import type { ConnectionOptions } from '#src/types'
 
+export const RUN_WITH_WORKER_CONTEXT = Symbol.for(
+  '@athenna/queue.runWithWorkerContext'
+)
+
+export type ScopedQueueProcessor<T = unknown> = ((data: T) => any | Promise<any>) & {
+  [RUN_WITH_WORKER_CONTEXT]?: (
+    data: T,
+    callback: () => any | Promise<any>
+  ) => any | Promise<any>
+}
+
 export abstract class Driver<Client = any> {
   /**
    * Set if this instance is connected.
@@ -162,6 +173,20 @@ export abstract class Driver<Client = any> {
     const random = Math.floor(Math.random() * (max - baseDelay + 1)) + baseDelay
 
     return random
+  }
+
+  protected runScopedQueueProcessor<T>(
+    processor: ScopedQueueProcessor<T>,
+    data: T,
+    callback: () => any | Promise<any>
+  ) {
+    const runner = processor[RUN_WITH_WORKER_CONTEXT]
+
+    if (runner) {
+      return runner(data, callback)
+    }
+
+    return callback()
   }
 
   /**

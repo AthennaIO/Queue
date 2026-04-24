@@ -413,32 +413,36 @@ export class AwsSqsDriver extends Driver<SQSClient> {
       heartbeatTimeout = undefined
     }
 
-    try {
-      startHeartbeat()
-
-      await processor({
-        id: job.id,
-        attempts: job.attempts,
-        data: job.data
-      })
-
-      stopHeartbeat()
-
-      if (!AwsSqsDriver.ackedIds.has(job.id)) {
-        await this.changeJobVisibility(
-          job.id,
-          this.msToS(this.noAckDelayMs + requeueJitterMs)
-        )
-      }
-    } catch (error) {
-      await new AwsSqsDriverExceptionHandler().handle({
-        job,
-        error,
-        driver: this,
-        stopHeartbeat,
-        requeueJitterMs
-      })
+    const workerJob = {
+      id: job.id,
+      attempts: job.attempts,
+      data: job.data
     }
+
+    await this.runScopedQueueProcessor(processor, workerJob, async () => {
+      try {
+        startHeartbeat()
+
+        await processor(workerJob)
+
+        stopHeartbeat()
+
+        if (!AwsSqsDriver.ackedIds.has(job.id)) {
+          await this.changeJobVisibility(
+            job.id,
+            this.msToS(this.noAckDelayMs + requeueJitterMs)
+          )
+        }
+      } catch (error) {
+        await new AwsSqsDriverExceptionHandler().handle({
+          job,
+          error,
+          driver: this,
+          stopHeartbeat,
+          requeueJitterMs
+        })
+      }
+    })
   }
 
   /**
