@@ -264,29 +264,33 @@ export class MemoryDriver extends Driver {
     job.attempts--
     job.reservedUntil = Date.now() + this.visibilityTimeout
 
-    try {
-      await processor({
-        id: job.id,
-        attempts: job.attempts,
-        data: job.data
-      })
-
-      /**
-       * If the job still exists after processing, it means that the job was
-       * not processed for some reason, so we need to make it available again
-       * after a delay.
-       */
-      if (!MemoryDriver.ackedIds.has(job.id)) {
-        job.reservedUntil = null
-        job.availableAt = Date.now() + this.noAckDelayMs + requeueJitterMs
-      }
-    } catch (error) {
-      await new MemoryDriverExceptionHandler().handle({
-        job,
-        error,
-        driver: this,
-        requeueJitterMs
-      })
+    const workerJob = {
+      id: job.id,
+      attempts: job.attempts,
+      data: job.data
     }
+
+    await this.runScopedQueueProcessor(processor, workerJob, async () => {
+      try {
+        await processor(workerJob)
+
+        /**
+         * If the job still exists after processing, it means that the job was
+         * not processed for some reason, so we need to make it available again
+         * after a delay.
+         */
+        if (!MemoryDriver.ackedIds.has(job.id)) {
+          job.reservedUntil = null
+          job.availableAt = Date.now() + this.noAckDelayMs + requeueJitterMs
+        }
+      } catch (error) {
+        await new MemoryDriverExceptionHandler().handle({
+          job,
+          error,
+          driver: this,
+          requeueJitterMs
+        })
+      }
+    })
   }
 }

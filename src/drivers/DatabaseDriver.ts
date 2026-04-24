@@ -326,38 +326,42 @@ export class DatabaseDriver extends Driver<DatabaseImpl> {
 
     DatabaseDriver.ackedIds.delete(job.id)
 
-    try {
-      await processor({
-        id: job.id,
-        attempts: job.attempts,
-        data: job.data
-      })
-
-      /**
-       * If the job still exists after processing, it means that the job was
-       * not processed for some reason, so we need to make it available again
-       * after a delay.
-       */
-      if (!DatabaseDriver.ackedIds.has(job.id)) {
-        job.reservedUntil = null
-        job.availableAt = Date.now() + this.noAckDelayMs + requeueJitterMs
-
-        await this.client
-          .table(this.table)
-          .where('queue', this.queueName)
-          .where('id', job.id)
-          .update({
-            availableAt: job.availableAt,
-            reservedUntil: job.reservedUntil
-          })
-      }
-    } catch (error) {
-      await new DatabaseDriverExceptionHandler().handle({
-        job,
-        error,
-        driver: this,
-        requeueJitterMs
-      })
+    const workerJob = {
+      id: job.id,
+      attempts: job.attempts,
+      data: job.data
     }
+
+    await this.runScopedQueueProcessor(processor, workerJob, async () => {
+      try {
+        await processor(workerJob)
+
+        /**
+         * If the job still exists after processing, it means that the job was
+         * not processed for some reason, so we need to make it available again
+         * after a delay.
+         */
+        if (!DatabaseDriver.ackedIds.has(job.id)) {
+          job.reservedUntil = null
+          job.availableAt = Date.now() + this.noAckDelayMs + requeueJitterMs
+
+          await this.client
+            .table(this.table)
+            .where('queue', this.queueName)
+            .where('id', job.id)
+            .update({
+              availableAt: job.availableAt,
+              reservedUntil: job.reservedUntil
+            })
+        }
+      } catch (error) {
+        await new DatabaseDriverExceptionHandler().handle({
+          job,
+          error,
+          driver: this,
+          requeueJitterMs
+        })
+      }
+    })
   }
 }

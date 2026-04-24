@@ -11,7 +11,7 @@ import { Queue } from '#src/facades/Queue'
 import { Worker } from '#src/facades/Worker'
 import { OtelProvider } from '@athenna/otel'
 import { Path, Sleep } from '@athenna/common'
-import { LoggerProvider } from '@athenna/logger'
+import { Log, LoggerProvider } from '@athenna/logger'
 import { WorkerImpl } from '#src/worker/WorkerImpl'
 import { WorkerKernel } from '#src/kernels/WorkerKernel'
 import { constants } from '#tests/fixtures/constants/index'
@@ -140,6 +140,52 @@ export class WorkerKernelTest {
 
     assert.equal(values.name, 'otel_worker')
     assert.equal(values.connection, values.ctxConnection)
+    assert.equal(values.connection, 'memory')
+  }
+
+  @Test()
+  @Cleanup(() => {
+    Config.set('worker.otel.contextEnabled', false)
+  })
+  @Cleanup(() => {
+    Config.set('worker.otel.contextBindings', [])
+  })
+  @Cleanup(() => {
+    Config.set('worker.logger.prettifyException', true)
+  })
+  public async shouldKeepOtelContextActiveDuringWorkerExceptionLogging({ assert }: Context) {
+    const workerNameKey = createContextKey('worker.exception.name')
+    const workerConnectionKey = createContextKey('worker.exception.connection')
+    const values = {
+      name: null,
+      connection: null
+    }
+
+    Config.set('worker.otel.contextEnabled', true)
+    Config.set('worker.otel.contextBindings', [
+      { key: workerNameKey, resolve: ctx => ctx.name },
+      { key: workerConnectionKey, resolve: ctx => ctx.connection }
+    ])
+    Config.set('worker.logger.prettifyException', false)
+
+    Log.when('channelOrVanilla').return({
+      error: () => {
+        values.name = context.active().getValue(workerNameKey) as any
+        values.connection = context.active().getValue(workerConnectionKey) as any
+      }
+    })
+
+    Worker.task()
+      .name('otel_worker_exception')
+      .connection('memory')
+      .handler(async () => {
+        throw new Error('testing')
+      })
+
+    await Queue.add({ test: 1 })
+    await Queue.worker().runByName('otel_worker_exception')
+
+    assert.equal(values.name, 'otel_worker_exception')
     assert.equal(values.connection, 'memory')
   }
 

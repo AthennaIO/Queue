@@ -12,6 +12,7 @@ import { Queue } from '#src/facades/Queue'
 import { WorkerImpl } from '#src/worker/WorkerImpl'
 import { Is, Module, Parser } from '@athenna/common'
 import type { Context, ConnectionOptions } from '#src/types'
+import { RUN_WITH_WORKER_CONTEXT } from '#src/drivers/Driver'
 import type { WorkerHandler } from '#src/types/WorkerHandler'
 import { WorkerTimeoutException } from '#src/exceptions/WorkerTimeoutException'
 
@@ -51,6 +52,7 @@ export class WorkerTaskBuilder {
   } = {}
 
   private timers: NodeJS.Timeout[] = []
+  private rawHandler?: WorkerHandler
 
   public constructor() {
     this.worker.connection = Config.get('queue.default')
@@ -98,39 +100,10 @@ export class WorkerTaskBuilder {
    * ```
    */
   public handler(handler: WorkerHandler) {
-    const logIfEnabled = (ctx: any) => {
-      if (WorkerImpl.loggerIsSet) {
-        const channel = Config.get('worker.logger.channel', 'worker')
-        const isToLogRequest = Config.get('worker.logger.isToLogRequest')
-
-        if (!isToLogRequest) {
-          return Log.channelOrVanilla(channel).info(ctx)
-        }
-
-        if (isToLogRequest(ctx)) {
-          return Log.channelOrVanilla(channel).info(ctx)
-        }
-      }
-    }
+    this.rawHandler = handler
 
     this.worker.handler = async ctx => {
-      const execute = async () => {
-        ctx.traceId = WorkerImpl.rTracerPlugin
-          ? WorkerImpl.rTracerPlugin.id()
-          : ctx.traceId ?? null
-
-        return this.runWithOtelContext(ctx, async () => {
-          await handler(ctx)
-
-          logIfEnabled(ctx)
-        })
-      }
-
-      if (WorkerImpl.rTracerPlugin) {
-        return WorkerImpl.rTracerPlugin.runWithId(execute)
-      }
-
-      return execute()
+      return this.executeInWorkerContext(ctx, () => this.executeHandler(ctx))
     }
 
     const task = WorkerImpl.tasks.find(
@@ -196,17 +169,9 @@ export class WorkerTaskBuilder {
       options: this.worker.options
     })
 
-    await queue.process(job => {
-      const ctx = {
-        name: this.worker.name,
-        traceId: null,
-        connection: this.worker.connection,
-        options: this.worker.options,
-        job
-      }
+    const processor = this.createScopedProcessor()
 
-      return this.worker.handler(ctx)
-    })
+    await queue.process(processor)
   }
 
   /**
@@ -352,6 +317,77 @@ export class WorkerTaskBuilder {
     }
 
     return Math.floor(Math.random() * (max + 1))
+  }
+
+  private createScopedProcessor(): (data: unknown) => any | Promise<any> {
+    let currentCtx: Context | null = null
+
+    const processor: (data: unknown) => any | Promise<any> = async job => {
+      const ctx = currentCtx || this.createContext(job as Context['job'])
+
+      return this.executeHandler(ctx)
+    }
+
+    processor[RUN_WITH_WORKER_CONTEXT] = async (job, callback) => {
+      const ctx = this.createContext(job)
+
+      currentCtx = ctx
+
+      try {
+        return await this.executeInWorkerContext(ctx, callback)
+      } finally {
+        currentCtx = null
+      }
+    }
+
+    return processor
+  }
+
+  private createContext(job: Context['job']): Context {
+    return {
+      name: this.worker.name,
+      traceId: null,
+      connection: this.worker.connection,
+      options: this.worker.options,
+      job
+    }
+  }
+
+  private async executeHandler(ctx: Context) {
+    await this.rawHandler(ctx)
+
+    this.logIfEnabled(ctx)
+  }
+
+  private logIfEnabled(ctx: any) {
+    if (WorkerImpl.loggerIsSet) {
+      const channel = Config.get('worker.logger.channel', 'worker')
+      const isToLogRequest = Config.get('worker.logger.isToLogRequest')
+
+      if (!isToLogRequest) {
+        return Log.channelOrVanilla(channel).info(ctx)
+      }
+
+      if (isToLogRequest(ctx)) {
+        return Log.channelOrVanilla(channel).info(ctx)
+      }
+    }
+  }
+
+  private executeInWorkerContext<T>(ctx: Context, callback: () => T): T {
+    const execute = () => {
+      ctx.traceId = WorkerImpl.rTracerPlugin
+        ? WorkerImpl.rTracerPlugin.id()
+        : ctx.traceId ?? null
+
+      return this.runWithOtelContext(ctx, callback)
+    }
+
+    if (WorkerImpl.rTracerPlugin) {
+      return WorkerImpl.rTracerPlugin.runWithId(execute)
+    }
+
+    return execute()
   }
 
   private runWithOtelContext<T>(ctx: any, callback: () => T): T {

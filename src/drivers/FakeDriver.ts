@@ -11,6 +11,7 @@ import { Log } from '@athenna/logger'
 import { Json, Options } from '@athenna/common'
 import type { ConnectionOptions } from '#src/types'
 import { ConnectionFactory } from '#src/factories/ConnectionFactory'
+import { RUN_WITH_WORKER_CONTEXT, type ScopedQueueProcessor } from '#src/drivers/Driver'
 
 export class FakeDriver {
   public constructor(connection?: string, client?: any) {
@@ -222,6 +223,20 @@ export class FakeDriver {
    */
   public static calculateHeartbeatDelay() {
     return 0
+  }
+
+  protected runScopedQueueProcessor<T>(
+    processor: ScopedQueueProcessor<T>,
+    data: T,
+    callback: () => any | Promise<any>
+  ) {
+    const runner = processor[RUN_WITH_WORKER_CONTEXT]
+
+    if (runner) {
+      return runner(data, callback)
+    }
+
+    return callback()
   }
 
   /**

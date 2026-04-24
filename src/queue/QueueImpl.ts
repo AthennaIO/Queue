@@ -13,11 +13,10 @@ import type { Job, ConnectionOptions } from '#src/types'
 import type { FakeDriver } from '#src/drivers/FakeDriver'
 import type { AwsSqsDriver } from '#src/drivers/AwsSqsDriver'
 import type { MemoryDriver } from '#src/drivers/MemoryDriver'
-import type { Driver as DriverImpl } from '#src/drivers/Driver'
 import type { DatabaseDriver } from '#src/drivers/DatabaseDriver'
 import { ConnectionFactory } from '#src/factories/ConnectionFactory'
 
-export class QueueImpl<Driver extends DriverImpl = any> extends Macroable {
+export class QueueImpl<Driver = any> extends Macroable {
   /**
    * The connection name used for this instance.
    */
