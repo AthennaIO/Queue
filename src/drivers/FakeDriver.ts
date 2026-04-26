@@ -234,7 +234,10 @@ export class FakeDriver {
   /**
    * Change the job visibility values in the queue.
    */
-  public static changeJobVisibility(_jobId: string, _seconds: number): Promise<void> {
+  public static changeJobVisibility(
+    _jobId: string,
+    _seconds: number
+  ): Promise<void> {
     return Promise.resolve()
   }
 

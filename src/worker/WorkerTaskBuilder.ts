@@ -112,6 +112,7 @@ export class WorkerTaskBuilder {
     )
 
     if (task) {
+      task.rawHandler = this.rawHandler
       task.worker.isRegistered = true
       task.worker.handler = this.worker.handler
 
