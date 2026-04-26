@@ -22,6 +22,7 @@ import { Driver } from '#src/drivers/Driver'
 import { Is, Options, Uuid } from '@athenna/common'
 import type { ConnectionOptions } from '#src/types'
 import { ConnectionFactory } from '#src/factories/ConnectionFactory'
+import { QueueExecutionScope } from '#src/worker/QueueExecutionScope'
 import { AwsSqsDriverExceptionHandler } from '#src/handlers/AwsSqsDriverExceptionHandler'
 import { NotFifoSqsQueueTypeException } from '#src/exceptions/NotFifoSqsQueueTypeException'
 
@@ -390,17 +391,30 @@ export class AwsSqsDriver extends Driver<SQSClient> {
     const heartbeatDelay = this.calculateHeartbeatDelay()
 
     let heartbeatTimeout: NodeJS.Timeout
+    let scope: QueueExecutionScope | null = null
 
     const startHeartbeat = () => {
       if (heartbeatDelay <= 0) {
         return
       }
 
-      heartbeatTimeout = setInterval(() => {
-        this.changeJobVisibility(
+      const heartbeat = scope?.bind(async () => {
+        await this.changeJobVisibility(
           job.id,
           this.msToS(this.visibilityTimeout)
-        ).catch(() => {})
+        )
+      })
+
+      heartbeatTimeout = setInterval(() => {
+        const changeVisibility =
+          heartbeat ||
+          (() =>
+            this.changeJobVisibility(
+              job.id,
+              this.msToS(this.visibilityTimeout)
+            ))
+
+        Promise.resolve(changeVisibility()).catch(() => {})
       }, heartbeatDelay)
     }
 
@@ -419,34 +433,41 @@ export class AwsSqsDriver extends Driver<SQSClient> {
       data: job.data
     }
 
-    await this.runScopedQueueProcessor(processor, workerJob, async () => {
-      try {
-        startHeartbeat()
+    await this.runScopedQueueProcessor(
+      processor,
+      workerJob,
+      async () => {
+        try {
+          startHeartbeat()
 
-        await processor(workerJob)
+          await processor(workerJob)
 
-        stopHeartbeat()
+          stopHeartbeat()
 
-        if (!AwsSqsDriver.ackedIds.has(job.id)) {
-          await this.changeJobVisibility(
-            job.id,
-            this.msToS(this.noAckDelayMs + requeueJitterMs)
-          )
+          if (!AwsSqsDriver.ackedIds.has(job.id)) {
+            await this.changeJobVisibility(
+              job.id,
+              this.msToS(this.noAckDelayMs + requeueJitterMs)
+            )
+          }
+        } catch (error) {
+          await new AwsSqsDriverExceptionHandler().handle({
+            job,
+            error,
+            driver: this,
+            stopHeartbeat,
+            requeueJitterMs
+          })
         }
-      } catch (error) {
-        await new AwsSqsDriverExceptionHandler().handle({
-          job,
-          error,
-          driver: this,
-          stopHeartbeat,
-          requeueJitterMs
-        })
+      },
+      executionScope => {
+        scope = executionScope
       }
-    })
+    )
   }
 
   /**
-   * Send a job to the deadletter quue.
+   * Send a job to the deadletter queue.
    */
   public async sendJobToDLQ(job: any) {
     if (Is.Object(job.data)) {
