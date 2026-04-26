@@ -9,22 +9,30 @@
 
 import { Path } from '@athenna/common'
 import { Queue, QueueProvider } from '#src'
-import { LoggerProvider } from '@athenna/logger'
+import { OtelProvider } from '@athenna/otel'
+import { Log, LoggerProvider } from '@athenna/logger'
+import { context, createContextKey } from '@opentelemetry/api'
+import { AsyncLocalStorageContextManager } from '@opentelemetry/context-async-hooks'
 import { Test, type Context, Mock, BeforeEach, AfterEach } from '@athenna/test'
 
 export class FakeDriverTest {
   @BeforeEach()
   public async beforeEach() {
+    context.setGlobalContextManager(new AsyncLocalStorageContextManager().enable())
     await Config.loadAll(Path.fixtures('config'))
 
+    new OtelProvider().register()
     new QueueProvider().register()
     new LoggerProvider().register()
   }
 
   @AfterEach()
   public async afterEach() {
+    context.disable()
+
     await Queue.connection('fake').truncate()
     await Queue.closeAll()
+    await new OtelProvider().shutdown()
 
     ioc.reconstruct()
 
@@ -189,6 +197,67 @@ export class FakeDriverTest {
     const length = await queue.queue('deadletter').length()
 
     assert.deepEqual(length, 1)
+  }
+
+  @Test()
+  public async shouldRunFallbackProcessorsInsideOtelContext({ assert }: Context) {
+    const queue = Queue.connection('fake')
+    const nameKey = createContextKey('fake.driver.name')
+    const attemptsKey = createContextKey('fake.driver.attempts')
+    const values = {
+      name: null,
+      attempts: null
+    }
+
+    Config.set('worker.otel.contextEnabled', true)
+    Config.set('worker.otel.contextBindings', [
+      { key: nameKey, resolve: ctx => ctx.job.data.name },
+      { key: attemptsKey, resolve: ctx => ctx.job.attempts }
+    ])
+
+    Mock.when(queue.driver, 'pop').resolve({ name: 'lenon' })
+
+    await queue.process(async job => {
+      values.name = context.active().getValue(nameKey) as any
+      values.attempts = context.active().getValue(attemptsKey) as any
+
+      assert.deepEqual(job, { name: 'lenon' })
+    })
+
+    assert.equal(values.name, 'lenon')
+    assert.equal(values.attempts, 1)
+  }
+
+  @Test()
+  public async shouldKeepOtelContextActiveDuringFallbackProcessorExceptionLogging({ assert }: Context) {
+    const queue = Queue.connection('fake')
+    const nameKey = createContextKey('fake.driver.exception.name')
+    const attemptsKey = createContextKey('fake.driver.exception.attempts')
+    const values = {
+      name: null,
+      attempts: null
+    }
+
+    Config.set('worker.otel.contextEnabled', true)
+    Config.set('worker.otel.contextBindings', [
+      { key: nameKey, resolve: ctx => ctx.job.data.name },
+      { key: attemptsKey, resolve: ctx => ctx.job.attempts }
+    ])
+
+    Mock.when(queue.driver, 'pop').resolve({ name: 'lenon' })
+    Log.when('channelOrVanilla').return({
+      error: () => {
+        values.name = context.active().getValue(nameKey) as any
+        values.attempts = context.active().getValue(attemptsKey) as any
+      }
+    })
+
+    await queue.process(async () => {
+      throw new Error('testing')
+    })
+
+    assert.equal(values.name, 'lenon')
+    assert.equal(values.attempts, 1)
   }
 
   @Test()

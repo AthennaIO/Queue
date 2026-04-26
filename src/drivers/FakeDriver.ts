@@ -8,10 +8,14 @@
  */
 
 import { Log } from '@athenna/logger'
-import { Json, Options } from '@athenna/common'
-import type { ConnectionOptions } from '#src/types'
+import { Is, Json, Options } from '@athenna/common'
+import type { Job, ConnectionOptions } from '#src/types'
 import { ConnectionFactory } from '#src/factories/ConnectionFactory'
-import { RUN_WITH_WORKER_CONTEXT, type ScopedQueueProcessor } from '#src/drivers/Driver'
+import { QueueExecutionScope } from '#src/worker/QueueExecutionScope'
+import {
+  RUN_WITH_WORKER_CONTEXT,
+  type ScopedQueueProcessor
+} from '#src/drivers/Driver'
 
 export class FakeDriver {
   public constructor(connection?: string, client?: any) {
@@ -38,6 +42,7 @@ export class FakeDriver {
   public static visibilityTimeout: number = 30000
   public static workerInterval: number = 1000
   public static noAckDelayMs: number = 1700
+  public static options?: ConnectionOptions['options']
   public static backoff: {
     type: 'fixed' | 'exponential'
     delay: number
@@ -99,6 +104,7 @@ export class FakeDriver {
 
     this.isConnected = true
     this.isSavedOnFactory = options.saveOnFactory
+    this.options = options.options
   }
 
   /**
@@ -225,18 +231,68 @@ export class FakeDriver {
     return 0
   }
 
-  protected runScopedQueueProcessor<T>(
+  /**
+   * Change the job visibility values in the queue.
+   */
+  public static changeJobVisibility(
+    _jobId: string,
+    _seconds: number
+  ): Promise<void> {
+    return Promise.resolve()
+  }
+
+  /**
+   * Send a job to the deadletter queue.
+   */
+  public static sendJobToDLQ(_jobId: string): Promise<void> {
+    return Promise.resolve()
+  }
+
+  private static createContextJob<T>(data: T) {
+    if (this.isJob(data)) {
+      return data
+    }
+
+    return {
+      id: null,
+      attempts: this.attempts,
+      data
+    } as Job
+  }
+
+  private static isJob(data: unknown): data is Job {
+    if (!data || !Is.Object(data)) {
+      return false
+    }
+
+    const candidate = data as Partial<Job>
+
+    return 'data' in candidate && 'attempts' in candidate
+  }
+
+  protected static runScopedQueueProcessor<T>(
     processor: ScopedQueueProcessor<T>,
     data: T,
-    callback: () => any | Promise<any>
+    callback: () => any | Promise<any>,
+    captureScope?: (scope: QueueExecutionScope<T>) => void
   ) {
     const runner = processor[RUN_WITH_WORKER_CONTEXT]
 
     if (runner) {
-      return runner(data, callback)
+      return runner(data, callback, captureScope)
     }
 
-    return callback()
+    const scope = new QueueExecutionScope<T>({
+      name: this.queueName,
+      connection: this.connection,
+      options: this.options,
+      traceId: null,
+      job: this.createContextJob(data)
+    })
+
+    captureScope?.(scope)
+
+    return scope.run(callback)
   }
 
   /**
@@ -256,21 +312,23 @@ export class FakeDriver {
   ) {
     const data = await this.pop()
 
-    try {
-      await processor(data)
-    } catch (err) {
-      Log.channelOrVanilla('exception').error({
-        msg: `failed to process job: ${err.message}`,
-        queue: this.queueName,
-        deadletter: this.deadletter,
-        name: err.name,
-        code: err.code,
-        help: err.help,
-        details: err.details,
-        metadata: err.metadata,
-        stack: err.stack,
-        job: data
-      })
-    }
+    await this.runScopedQueueProcessor(processor, data, async () => {
+      try {
+        await processor(data)
+      } catch (err) {
+        Log.channelOrVanilla('exception').error({
+          msg: `failed to process job: ${err.message}`,
+          queue: this.queueName,
+          deadletter: this.deadletter,
+          name: err.name,
+          code: err.code,
+          help: err.help,
+          details: err.details,
+          metadata: err.metadata,
+          stack: err.stack,
+          job: data
+        })
+      }
+    })
   }
 }

@@ -9,17 +9,22 @@
 
 import { Is, Path } from '@athenna/common'
 import { EnvHelper } from '@athenna/config'
-import { LoggerProvider } from '@athenna/logger'
+import { OtelProvider } from '@athenna/otel'
 import { BaseTest } from '#tests/helpers/BaseTest'
+import { Log, LoggerProvider } from '@athenna/logger'
 import { Queue, WorkerProvider, QueueProvider } from '#src'
-import { Test, type Context, BeforeEach, AfterEach, Skip, AfterAll } from '@athenna/test'
+import { context, createContextKey } from '@opentelemetry/api'
+import { AsyncLocalStorageContextManager } from '@opentelemetry/context-async-hooks'
+import { Test, type Context, BeforeEach, AfterEach, Skip, AfterAll, Mock } from '@athenna/test'
 
 export class AwsSqsDriverTest extends BaseTest {
   @BeforeEach()
   public async beforeEach() {
+    context.setGlobalContextManager(new AsyncLocalStorageContextManager().enable())
     EnvHelper.resolveFilePath(Path.pwd('.env'))
     await Config.loadAll(Path.fixtures('config'))
 
+    new OtelProvider().register()
     new QueueProvider().register()
     new WorkerProvider().register()
     new LoggerProvider().register()
@@ -27,13 +32,17 @@ export class AwsSqsDriverTest extends BaseTest {
 
   @AfterEach()
   public async afterEach() {
+    context.disable()
+
     await Queue.closeAll()
+    await new OtelProvider().shutdown()
 
     Queue.worker().close()
 
     ioc.reconstruct()
 
     Config.clear()
+    Mock.restoreAll()
   }
 
   @AfterAll()
@@ -218,6 +227,108 @@ export class AwsSqsDriverTest extends BaseTest {
     const isEmpty = await queue.queue(Config.get('queue.connections.aws_sqs.deadletter')).isEmpty()
 
     assert.isFalse(isEmpty)
+  }
+
+  @Test()
+  public async shouldRunFallbackProcessorsInsideOtelContext({ assert }: Context) {
+    const queue = Queue.connection('aws_sqs')
+    const connectionKey = createContextKey('aws.driver.connection')
+    const attemptsKey = createContextKey('aws.driver.attempts')
+    const values = {
+      connection: null,
+      attempts: null
+    }
+
+    Config.set('worker.otel.contextEnabled', true)
+    Config.set('worker.otel.contextBindings', [
+      { key: connectionKey, resolve: ctx => ctx.connection },
+      { key: attemptsKey, resolve: ctx => ctx.job.attempts }
+    ])
+
+    Mock.when(queue.driver, 'pop').resolve({
+      id: 'receipt-1',
+      attempts: 0,
+      data: { name: 'lenon' },
+      metadata: { Attributes: { ApproximateReceiveCount: '1' } }
+    })
+
+    Mock.when(queue.driver, 'changeJobVisibility').resolve()
+
+    await queue.process(async () => {
+      values.connection = context.active().getValue(connectionKey) as any
+      values.attempts = context.active().getValue(attemptsKey) as any
+    })
+
+    assert.equal(values.connection, 'aws_sqs')
+    assert.equal(values.attempts, 0)
+  }
+
+  @Test()
+  public async shouldKeepOtelContextActiveDuringFallbackProcessorExceptionLogging({ assert }: Context) {
+    const queue = Queue.connection('aws_sqs')
+    const connectionKey = createContextKey('aws.driver.exception.connection')
+    const attemptsKey = createContextKey('aws.driver.exception.attempts')
+    const values = {
+      connection: null,
+      attempts: null
+    }
+
+    Config.set('worker.otel.contextEnabled', true)
+    Config.set('worker.otel.contextBindings', [
+      { key: connectionKey, resolve: ctx => ctx.connection },
+      { key: attemptsKey, resolve: ctx => ctx.job.attempts }
+    ])
+    Config.set('worker.logger.prettifyException', false)
+
+    Mock.when(queue.driver, 'pop').resolve({
+      id: 'receipt-2',
+      attempts: 0,
+      data: { name: 'lenon' },
+      metadata: { Attributes: { ApproximateReceiveCount: '1' } }
+    })
+    Mock.when(queue.driver, 'sendJobToDLQ').resolve()
+    Mock.when(queue.driver, 'ack').resolve()
+    Log.when('channelOrVanilla').return({
+      error: () => {
+        values.connection = context.active().getValue(connectionKey) as any
+        values.attempts = context.active().getValue(attemptsKey) as any
+      }
+    })
+
+    await queue.process(async () => {
+      throw new Error('testing')
+    })
+
+    assert.equal(values.connection, 'aws_sqs')
+    assert.equal(values.attempts, 0)
+  }
+
+  @Test()
+  public async shouldReenterCapturedScopeForHeartbeatCallbacks({ assert }: Context) {
+    const queue = Queue.connection('aws_sqs')
+    const connectionKey = createContextKey('aws.driver.heartbeat.connection')
+    const calls: string[] = []
+
+    Config.set('worker.otel.contextEnabled', true)
+    Config.set('worker.otel.contextBindings', [{ key: connectionKey, resolve: ctx => ctx.connection }])
+
+    Mock.when(queue.driver, 'pop').resolve({
+      id: 'receipt-3',
+      attempts: 0,
+      data: { name: 'lenon' },
+      metadata: { Attributes: { ApproximateReceiveCount: '1' } }
+    })
+    Mock.when(queue.driver, 'calculateHeartbeatDelay').return(5)
+    Mock.stub(queue.driver, 'changeJobVisibility').callsFake(async () => {
+      calls.push(context.active().getValue(connectionKey) as string)
+    })
+
+    await queue.process(async () => {
+      await new Promise(resolve => setTimeout(resolve, 20))
+    })
+
+    assert.isTrue(calls.length >= 1)
+    assert.isTrue(calls.every(value => value === 'aws_sqs'))
   }
 
   @Test()

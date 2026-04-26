@@ -8,17 +8,22 @@
  */
 
 import { Utils } from '#src/utils'
+import { Is } from '@athenna/common'
 import { Config } from '@athenna/config'
-import type { ConnectionOptions } from '#src/types'
+import type { Job, ConnectionOptions } from '#src/types'
+import { QueueExecutionScope } from '#src/worker/QueueExecutionScope'
 
 export const RUN_WITH_WORKER_CONTEXT = Symbol.for(
   '@athenna/queue.runWithWorkerContext'
 )
 
-export type ScopedQueueProcessor<T = unknown> = ((data: T) => any | Promise<any>) & {
+export type ScopedQueueProcessor<T = unknown> = ((
+  data: T
+) => any | Promise<any>) & {
   [RUN_WITH_WORKER_CONTEXT]?: (
     data: T,
-    callback: () => any | Promise<any>
+    callback: () => any | Promise<any>,
+    captureScope?: (scope: QueueExecutionScope<T>) => void
   ) => any | Promise<any>
 }
 
@@ -83,6 +88,11 @@ export abstract class Driver<Client = any> {
   }
 
   /**
+   * Set the custom options used when creating this driver.
+   */
+  public options?: ConnectionOptions['options']
+
+  /**
    * Creates a new instance of the Driver.
    */
   public constructor(
@@ -91,6 +101,8 @@ export abstract class Driver<Client = any> {
     options?: ConnectionOptions['options']
   ) {
     const config = Config.get(`queue.connections.${connection}`)
+
+    this.options = options
 
     this.workerInterval =
       options?.workerInterval || config.workerInterval || 1000
@@ -178,15 +190,48 @@ export abstract class Driver<Client = any> {
   protected runScopedQueueProcessor<T>(
     processor: ScopedQueueProcessor<T>,
     data: T,
-    callback: () => any | Promise<any>
+    callback: () => any | Promise<any>,
+    captureScope?: (scope: QueueExecutionScope<T>) => void
   ) {
     const runner = processor[RUN_WITH_WORKER_CONTEXT]
 
     if (runner) {
-      return runner(data, callback)
+      return runner(data, callback, captureScope)
     }
 
-    return callback()
+    const scope = new QueueExecutionScope<T>({
+      name: this.queueName,
+      connection: this.connection,
+      options: this.options,
+      traceId: null,
+      job: this.createContextJob(data)
+    })
+
+    captureScope?.(scope)
+
+    return scope.run(callback)
+  }
+
+  private createContextJob<T>(data: T) {
+    if (this.isJob(data)) {
+      return data
+    }
+
+    return {
+      id: null,
+      attempts: this.attempts,
+      data
+    } as Job
+  }
+
+  private isJob(data: unknown): data is Job {
+    if (!data || !Is.Object(data)) {
+      return false
+    }
+
+    const candidate = data as Partial<Job>
+
+    return 'data' in candidate && 'attempts' in candidate
   }
 
   /**
@@ -243,6 +288,20 @@ export abstract class Driver<Client = any> {
    * Verify if the queue is empty.
    */
   public abstract isEmpty(): Promise<boolean>
+
+  /**
+   * Change the job visibility values in the queue.
+   */
+  public changeJobVisibility(_jobId: string, _seconds: number): Promise<void> {
+    return Promise.resolve()
+  }
+
+  /**
+   * Send a job to the deadletter queue.
+   */
+  public sendJobToDLQ(_jobId: string): Promise<void> {
+    return Promise.resolve()
+  }
 
   /**
    * Process the next data in the queue.

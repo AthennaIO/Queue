@@ -9,14 +9,13 @@
 
 import { Log } from '@athenna/logger'
 import { Queue } from '#src/facades/Queue'
+import { Is, Parser } from '@athenna/common'
 import { WorkerImpl } from '#src/worker/WorkerImpl'
-import { Is, Module, Parser } from '@athenna/common'
 import type { Context, ConnectionOptions } from '#src/types'
-import { RUN_WITH_WORKER_CONTEXT } from '#src/drivers/Driver'
 import type { WorkerHandler } from '#src/types/WorkerHandler'
+import { RUN_WITH_WORKER_CONTEXT } from '#src/drivers/Driver'
+import { QueueExecutionScope } from '#src/worker/QueueExecutionScope'
 import { WorkerTimeoutException } from '#src/exceptions/WorkerTimeoutException'
-
-const otelModule = await Module.safeImport('@athenna/otel')
 
 export class WorkerTaskBuilder {
   public worker: {
@@ -103,7 +102,9 @@ export class WorkerTaskBuilder {
     this.rawHandler = handler
 
     this.worker.handler = async ctx => {
-      return this.executeInWorkerContext(ctx, () => this.executeHandler(ctx))
+      return new QueueExecutionScope(ctx, {
+        rTracerPlugin: WorkerImpl.rTracerPlugin
+      }).run(() => this.executeHandler(ctx))
     }
 
     const task = WorkerImpl.tasks.find(
@@ -111,6 +112,7 @@ export class WorkerTaskBuilder {
     )
 
     if (task) {
+      task.rawHandler = this.rawHandler
       task.worker.isRegistered = true
       task.worker.handler = this.worker.handler
 
@@ -328,16 +330,25 @@ export class WorkerTaskBuilder {
       return this.executeHandler(ctx)
     }
 
-    processor[RUN_WITH_WORKER_CONTEXT] = async (job, callback) => {
+    processor[RUN_WITH_WORKER_CONTEXT] = async (
+      job,
+      callback,
+      captureScope
+    ) => {
       const ctx = this.createContext(job)
+      const scope = new QueueExecutionScope(ctx, {
+        beforeRun: () => {
+          currentCtx = ctx
+        },
+        afterRun: () => {
+          currentCtx = null
+        },
+        rTracerPlugin: WorkerImpl.rTracerPlugin
+      })
 
-      currentCtx = ctx
+      captureScope?.(scope)
 
-      try {
-        return await this.executeInWorkerContext(ctx, callback)
-      } finally {
-        currentCtx = null
-      }
+      return scope.run(callback)
     }
 
     return processor
@@ -372,32 +383,5 @@ export class WorkerTaskBuilder {
         return Log.channelOrVanilla(channel).info(ctx)
       }
     }
-  }
-
-  private executeInWorkerContext<T>(ctx: Context, callback: () => T): T {
-    const execute = () => {
-      ctx.traceId = WorkerImpl.rTracerPlugin
-        ? WorkerImpl.rTracerPlugin.id()
-        : ctx.traceId ?? null
-
-      return this.runWithOtelContext(ctx, callback)
-    }
-
-    if (WorkerImpl.rTracerPlugin) {
-      return WorkerImpl.rTracerPlugin.runWithId(execute)
-    }
-
-    return execute()
-  }
-
-  private runWithOtelContext<T>(ctx: any, callback: () => T): T {
-    if (!Config.is('worker.otel.contextEnabled', true) || !otelModule) {
-      return callback()
-    }
-
-    return otelModule.Otel.withContext(callback, {
-      bindings: Config.get('worker.otel.contextBindings', []),
-      resolveBinding: binding => binding.resolve(ctx)
-    })
   }
 }
