@@ -9,7 +9,7 @@
 
 import { Is, Path } from '@athenna/common'
 import { EnvHelper } from '@athenna/config'
-import { OtelProvider } from '@athenna/otel'
+import { Otel, OtelProvider } from '@athenna/otel'
 import { BaseTest } from '#tests/helpers/BaseTest'
 import { Log, LoggerProvider } from '@athenna/logger'
 import { Queue, WorkerProvider, QueueProvider } from '#src'
@@ -25,6 +25,7 @@ export class AwsSqsDriverTest extends BaseTest {
     await Config.loadAll(Path.fixtures('config'))
 
     new OtelProvider().register()
+    Otel.start()
     new QueueProvider().register()
     new WorkerProvider().register()
     new LoggerProvider().register()

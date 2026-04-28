@@ -13,6 +13,7 @@ import { Is, Options } from '@athenna/common'
 import type { ConnectionOptions } from '#src/types'
 import type { DatabaseImpl } from '@athenna/database'
 import { ConnectionFactory } from '#src/factories/ConnectionFactory'
+import { QueueJobPropagationHelper } from '#src/helpers/QueueJobPropagationHelper'
 import { DatabaseDriverExceptionHandler } from '#src/handlers/DatabaseDriverExceptionHandler'
 
 export class DatabaseDriver extends Driver<DatabaseImpl> {
@@ -331,10 +332,11 @@ export class DatabaseDriver extends Driver<DatabaseImpl> {
       attempts: job.attempts,
       data: job.data
     }
+    const executionJob = QueueJobPropagationHelper.getJob(workerJob)
 
     await this.runScopedQueueProcessor(processor, workerJob, async () => {
       try {
-        await processor(workerJob)
+        await processor(executionJob)
 
         /**
          * If the job still exists after processing, it means that the job was

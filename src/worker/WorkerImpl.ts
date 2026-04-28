@@ -12,7 +12,6 @@ import { NotFoundWorkerTaskException } from '#src/exceptions/NotFoundWorkerTaskE
 
 export class WorkerImpl {
   public static loggerIsSet = false
-  public static rTracerPlugin: any
   public static tasks: WorkerTaskBuilder[] = []
 
   /**
@@ -40,20 +39,6 @@ export class WorkerImpl {
    */
   public setLogger(isToSetLogger: boolean) {
     WorkerImpl.loggerIsSet = isToSetLogger
-
-    return this
-  }
-
-  /**
-   * Set if the rTracer plugin should be set or not.
-   *
-   * @example
-   * ```ts
-   * Worker.setRTracerPlugin(true)
-   * ```
-   */
-  public setRTracerPlugin(rTracerPlugin: any) {
-    WorkerImpl.rTracerPlugin = rTracerPlugin
 
     return this
   }

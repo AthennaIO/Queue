@@ -8,7 +8,7 @@
  */
 
 import { Path, Sleep } from '@athenna/common'
-import { OtelProvider } from '@athenna/otel'
+import { Otel, OtelProvider } from '@athenna/otel'
 import { QueueExecutionScope } from '#src/worker/QueueExecutionScope'
 import { context, createContextKey } from '@opentelemetry/api'
 import { AsyncLocalStorageContextManager } from '@opentelemetry/context-async-hooks'
@@ -21,6 +21,7 @@ export class QueueExecutionScopeTest {
     await Config.loadAll(Path.fixtures('config'))
 
     new OtelProvider().register()
+    Otel.start()
   }
 
   @AfterEach()

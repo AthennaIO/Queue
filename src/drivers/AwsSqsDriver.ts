@@ -23,6 +23,7 @@ import { Is, Options, Uuid } from '@athenna/common'
 import type { ConnectionOptions } from '#src/types'
 import { ConnectionFactory } from '#src/factories/ConnectionFactory'
 import { QueueExecutionScope } from '#src/worker/QueueExecutionScope'
+import { QueueJobPropagationHelper } from '#src/helpers/QueueJobPropagationHelper'
 import { AwsSqsDriverExceptionHandler } from '#src/handlers/AwsSqsDriverExceptionHandler'
 import { NotFifoSqsQueueTypeException } from '#src/exceptions/NotFifoSqsQueueTypeException'
 
@@ -433,6 +434,8 @@ export class AwsSqsDriver extends Driver<SQSClient> {
       data: job.data
     }
 
+    const executionJob = QueueJobPropagationHelper.getJob(workerJob)
+
     await this.runScopedQueueProcessor(
       processor,
       workerJob,
@@ -440,7 +443,7 @@ export class AwsSqsDriver extends Driver<SQSClient> {
         try {
           startHeartbeat()
 
-          await processor(workerJob)
+          await processor(executionJob)
 
           stopHeartbeat()
 

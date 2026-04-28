@@ -15,6 +15,7 @@ import type { AwsSqsDriver } from '#src/drivers/AwsSqsDriver'
 import type { MemoryDriver } from '#src/drivers/MemoryDriver'
 import type { DatabaseDriver } from '#src/drivers/DatabaseDriver'
 import { ConnectionFactory } from '#src/factories/ConnectionFactory'
+import { QueueJobPropagationHelper } from '#src/helpers/QueueJobPropagationHelper'
 
 export class QueueImpl<Driver = any> extends Macroable {
   /**
@@ -181,7 +182,7 @@ export class QueueImpl<Driver = any> extends Macroable {
    * ```
    */
   public async add(item: unknown) {
-    await this.driver.add(item)
+    await this.driver.add(QueueJobPropagationHelper.createEnvelope(item))
   }
 
   /**
@@ -194,8 +195,14 @@ export class QueueImpl<Driver = any> extends Macroable {
    * const user = await Queue.pop()
    * ```
    */
-  public async pop() {
-    return this.driver.pop()
+  public async pop<T = Job<any>>() {
+    const job = await this.driver.pop<T>()
+
+    if (!job) {
+      return job
+    }
+
+    return QueueJobPropagationHelper.getJob(job)
   }
 
   /**
@@ -208,8 +215,14 @@ export class QueueImpl<Driver = any> extends Macroable {
    * const user = await Queue.peek()
    * ```
    */
-  public async peek() {
-    return this.driver.peek()
+  public async peek<T = Job<any>>() {
+    const job = await this.driver.peek<T>()
+
+    if (!job) {
+      return job
+    }
+
+    return QueueJobPropagationHelper.getJob(job)
   }
 
   /**

@@ -18,29 +18,6 @@ import { Annotation, type ServiceMeta } from '@athenna/ioc'
 
 export class WorkerKernel {
   /**
-   * Register the cls-rtracer plugin in the Worker.
-   */
-  public async registerRTracer(): Promise<void> {
-    const rTracerPlugin = await Module.safeImport('cls-rtracer')
-
-    if (Config.is('worker.rTracer.enabled', false)) {
-      debug(
-        'Not able to register rTracer plugin. Set the worker.rTracer.enabled configuration as true.'
-      )
-
-      return
-    }
-
-    if (!rTracerPlugin) {
-      debug('Not able to register tracer plugin. Install cls-rtracer package.')
-
-      return
-    }
-
-    Queue.worker().setRTracerPlugin(rTracerPlugin)
-  }
-
-  /**
    * Register the job logger in the Worker.
    */
   public async registerLogger(): Promise<void> {
