@@ -12,6 +12,7 @@ import { Is } from '@athenna/common'
 import { Config } from '@athenna/config'
 import type { Job, ConnectionOptions } from '#src/types'
 import { QueueExecutionScope } from '#src/worker/QueueExecutionScope'
+import { QueueJobPropagationHelper } from '#src/helpers/QueueJobPropagationHelper'
 
 export const RUN_WITH_WORKER_CONTEXT = Symbol.for(
   '@athenna/queue.runWithWorkerContext'
@@ -199,13 +200,19 @@ export abstract class Driver<Client = any> {
       return runner(data, callback, captureScope)
     }
 
-    const scope = new QueueExecutionScope<T>({
-      name: this.queueName,
-      connection: this.connection,
-      options: this.options,
-      traceId: null,
-      job: this.createContextJob(data)
-    })
+    const scope = new QueueExecutionScope<T>(
+      {
+        name: this.queueName,
+        connection: this.connection,
+        options: this.options,
+        traceId: null,
+        job: QueueJobPropagationHelper.getJob(this.createContextJob(data))
+      },
+      {
+        carrier: this.getJobCarrier(data),
+        currentContextValues: this.getJobCurrentContextValues(data)
+      }
+    )
 
     captureScope?.(scope)
 
@@ -222,6 +229,22 @@ export abstract class Driver<Client = any> {
       attempts: this.attempts,
       data
     } as Job
+  }
+
+  private getJobCarrier<T>(data: T) {
+    if (!this.isJob(data)) {
+      return {}
+    }
+
+    return QueueJobPropagationHelper.getCarrier(data.data)
+  }
+
+  private getJobCurrentContextValues<T>(data: T) {
+    if (!this.isJob(data)) {
+      return {}
+    }
+
+    return QueueJobPropagationHelper.getCurrentContextValues(data.data)
   }
 
   private isJob(data: unknown): data is Job {

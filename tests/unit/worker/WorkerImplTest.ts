@@ -29,7 +29,6 @@ export class WorkerImplTest {
   @AfterEach()
   public async afterEach() {
     WorkerImpl.loggerIsSet = false
-    WorkerImpl.rTracerPlugin = undefined
 
     await new QueueProvider().shutdown()
     await new WorkerProvider().shutdown()

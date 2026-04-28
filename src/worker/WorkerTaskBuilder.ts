@@ -16,6 +16,7 @@ import type { WorkerHandler } from '#src/types/WorkerHandler'
 import { RUN_WITH_WORKER_CONTEXT } from '#src/drivers/Driver'
 import { QueueExecutionScope } from '#src/worker/QueueExecutionScope'
 import { WorkerTimeoutException } from '#src/exceptions/WorkerTimeoutException'
+import { QueueJobPropagationHelper } from '#src/helpers/QueueJobPropagationHelper'
 
 export class WorkerTaskBuilder {
   public worker: {
@@ -103,7 +104,10 @@ export class WorkerTaskBuilder {
 
     this.worker.handler = async ctx => {
       return new QueueExecutionScope(ctx, {
-        rTracerPlugin: WorkerImpl.rTracerPlugin
+        carrier: QueueJobPropagationHelper.getCarrier(ctx.job.data),
+        currentContextValues: QueueJobPropagationHelper.getCurrentContextValues(
+          ctx.job.data
+        )
       }).run(() => this.executeHandler(ctx))
     }
 
@@ -343,7 +347,10 @@ export class WorkerTaskBuilder {
         afterRun: () => {
           currentCtx = null
         },
-        rTracerPlugin: WorkerImpl.rTracerPlugin
+        carrier: QueueJobPropagationHelper.getCarrier(job.data),
+        currentContextValues: QueueJobPropagationHelper.getCurrentContextValues(
+          job.data
+        )
       })
 
       captureScope?.(scope)
@@ -360,7 +367,7 @@ export class WorkerTaskBuilder {
       traceId: null,
       connection: this.worker.connection,
       options: this.worker.options,
-      job
+      job: QueueJobPropagationHelper.getJob(job)
     }
   }
 

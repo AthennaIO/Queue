@@ -12,6 +12,7 @@ import { Is, Json, Options } from '@athenna/common'
 import type { Job, ConnectionOptions } from '#src/types'
 import { ConnectionFactory } from '#src/factories/ConnectionFactory'
 import { QueueExecutionScope } from '#src/worker/QueueExecutionScope'
+import { QueueJobPropagationHelper } from '#src/helpers/QueueJobPropagationHelper'
 import {
   RUN_WITH_WORKER_CONTEXT,
   type ScopedQueueProcessor
@@ -171,8 +172,8 @@ export class FakeDriver {
    * const user = await Queue.pop()
    * ```
    */
-  public static async pop(): Promise<any> {
-    return {}
+  public static async pop<T = any>(): Promise<T> {
+    return null as T
   }
 
   /**
@@ -185,8 +186,8 @@ export class FakeDriver {
    * const user = await Queue.pop()
    * ```
    */
-  public static async peek(): Promise<any> {
-    return {}
+  public static async peek<T = any>(): Promise<T> {
+    return null as T
   }
 
   /**
@@ -282,13 +283,19 @@ export class FakeDriver {
       return runner(data, callback, captureScope)
     }
 
-    const scope = new QueueExecutionScope<T>({
-      name: this.queueName,
-      connection: this.connection,
-      options: this.options,
-      traceId: null,
-      job: this.createContextJob(data)
-    })
+    const scope = new QueueExecutionScope<T>(
+      {
+        name: this.queueName,
+        connection: this.connection,
+        options: this.options,
+        traceId: null,
+        job: QueueJobPropagationHelper.getJob(this.createContextJob(data))
+      },
+      {
+        carrier: this.getJobCarrier(data),
+        currentContextValues: this.getJobCurrentContextValues(data)
+      }
+    )
 
     captureScope?.(scope)
 
@@ -311,10 +318,13 @@ export class FakeDriver {
     processor: (data: unknown) => any | Promise<any>
   ) {
     const data = await this.pop()
+    const executionData = this.isJob(data)
+      ? QueueJobPropagationHelper.getJob(data)
+      : data
 
     await this.runScopedQueueProcessor(processor, data, async () => {
       try {
-        await processor(data)
+        await processor(executionData)
       } catch (err) {
         Log.channelOrVanilla('exception').error({
           msg: `failed to process job: ${err.message}`,
@@ -330,5 +340,21 @@ export class FakeDriver {
         })
       }
     })
+  }
+
+  private static getJobCarrier<T>(data: T) {
+    if (!this.isJob(data)) {
+      return {}
+    }
+
+    return QueueJobPropagationHelper.getCarrier(data.data)
+  }
+
+  private static getJobCurrentContextValues<T>(data: T) {
+    if (!this.isJob(data)) {
+      return {}
+    }
+
+    return QueueJobPropagationHelper.getCurrentContextValues(data.data)
   }
 }

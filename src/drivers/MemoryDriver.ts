@@ -11,6 +11,7 @@ import { Driver } from '#src/drivers/Driver'
 import { Options, Uuid } from '@athenna/common'
 import type { ConnectionOptions } from '#src/types'
 import { ConnectionFactory } from '#src/factories/ConnectionFactory'
+import { QueueJobPropagationHelper } from '#src/helpers/QueueJobPropagationHelper'
 import { MemoryDriverExceptionHandler } from '#src/handlers/MemoryDriverExceptionHandler'
 
 export class MemoryDriver extends Driver {
@@ -269,10 +270,11 @@ export class MemoryDriver extends Driver {
       attempts: job.attempts,
       data: job.data
     }
+    const executionJob = QueueJobPropagationHelper.getJob(workerJob)
 
     await this.runScopedQueueProcessor(processor, workerJob, async () => {
       try {
-        await processor(workerJob)
+        await processor(executionJob)
 
         /**
          * If the job still exists after processing, it means that the job was

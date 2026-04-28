@@ -9,10 +9,10 @@
 
 import { Queue } from '#src/facades/Queue'
 import { Worker } from '#src/facades/Worker'
-import { OtelProvider } from '@athenna/otel'
 import { Path, Sleep } from '@athenna/common'
-import { Log, LoggerProvider } from '@athenna/logger'
+import { Otel, OtelProvider } from '@athenna/otel'
 import { WorkerImpl } from '#src/worker/WorkerImpl'
+import { Log, LoggerProvider } from '@athenna/logger'
 import { WorkerKernel } from '#src/kernels/WorkerKernel'
 import { constants } from '#tests/fixtures/constants/index'
 import { QueueProvider } from '#src/providers/QueueProvider'
@@ -28,10 +28,10 @@ export class WorkerKernelTest {
 
     context.setGlobalContextManager(new AsyncLocalStorageContextManager().enable())
     WorkerImpl.loggerIsSet = false
-    WorkerImpl.rTracerPlugin = undefined
 
     await Config.loadAll(Path.fixtures('config'))
     new OtelProvider().register()
+    Otel.start()
     new LoggerProvider().register()
     new QueueProvider().register()
     new WorkerProvider().register()
@@ -52,35 +52,11 @@ export class WorkerKernelTest {
   }
 
   @Test()
-  public async shouldBeAbleToRegisterRTracerPluginInWorkerHandler({ assert }: Context) {
-    const kernel = new WorkerKernel()
-
-    await kernel.registerRTracer()
-
-    assert.isDefined(WorkerImpl.rTracerPlugin)
-  }
-
-  @Test()
-  public async shouldNotRegisterRTracerPluginInWorkerHandlerIfRTracerConfigIsDisabled({ assert }: Context) {
-    Config.set('worker.rTracer.enabled', false)
-
-    const kernel = new WorkerKernel()
-
-    await kernel.registerRTracer()
-
-    assert.isUndefined(WorkerImpl.rTracerPlugin)
-  }
-
-  @Test()
-  public async shouldBeAbleToGetTraceIdInHandlerWhenRTracerPluginIsEnabled({ assert }: Context) {
-    const kernel = new WorkerKernel()
-
-    await kernel.registerRTracer()
-
+  public async shouldBeAbleToGetTraceIdInHandlerFromTheActiveOtelSpan({ assert }: Context) {
     let traceId = null
 
     Worker.task()
-      .name('r_tracer')
+      .name('otel_trace')
       .connection('memory')
       .handler(ctx => {
         traceId = ctx.traceId
@@ -100,7 +76,6 @@ export class WorkerKernelTest {
     Config.set('worker.otel.contextBindings', [])
   })
   public async shouldBeAbleToRunWorkerHandlersInsideConfiguredOtelContext({ assert }: Context) {
-    const kernel = new WorkerKernel()
     const workerNameKey = createContextKey('worker.name')
     const workerConnectionKey = createContextKey('worker.connection')
     let values: any = {}
@@ -110,8 +85,6 @@ export class WorkerKernelTest {
       { key: workerNameKey, resolve: ctx => ctx.name },
       { key: workerConnectionKey, resolve: ctx => ctx.connection }
     ])
-
-    await kernel.registerRTracer()
 
     Worker.task()
       .name('otel_worker')
@@ -255,10 +228,9 @@ export class WorkerKernelTest {
   }
 
   @Test()
-  public async shouldBeAbleToRegisterRTracerPluginInWorkerHandlerAndRunAWorker({ assert }: Context) {
+  public async shouldBeAbleToRegisterWorkersAndRunAWorker({ assert }: Context) {
     const kernel = new WorkerKernel()
 
-    await kernel.registerRTracer()
     await kernel.registerWorkers()
 
     await Queue.add({ test: 1 })
@@ -283,11 +255,10 @@ export class WorkerKernelTest {
   }
 
   @Test()
-  public async shouldBeAbleToRegisterLoggerAndRTracerPluginInWorkerHandlerAndRunAWorker({ assert }: Context) {
+  public async shouldBeAbleToRegisterLoggerAndWorkersAndRunAWorker({ assert }: Context) {
     const kernel = new WorkerKernel()
 
     await kernel.registerLogger()
-    await kernel.registerRTracer()
     await kernel.registerWorkers()
 
     await Queue.add({ test: 1 })

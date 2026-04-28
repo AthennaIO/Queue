@@ -9,7 +9,7 @@
 
 import { Queue, QueueProvider } from '#src'
 import { Path, Sleep } from '@athenna/common'
-import { OtelProvider } from '@athenna/otel'
+import { Otel, OtelProvider } from '@athenna/otel'
 import { Log, LoggerProvider } from '@athenna/logger'
 import { context, createContextKey } from '@opentelemetry/api'
 import { AsyncLocalStorageContextManager } from '@opentelemetry/context-async-hooks'
@@ -22,6 +22,7 @@ export class MemoryDriverTest {
     await Config.loadAll(Path.fixtures('config'))
 
     new OtelProvider().register()
+    Otel.start()
     new QueueProvider().register()
     new LoggerProvider().register()
   }
