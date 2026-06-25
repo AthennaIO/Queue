@@ -96,8 +96,7 @@ export class AwsSqsDriver extends Driver<SQSClient> {
 
     this.type = options?.type || config?.type || 'standard'
     this.region = options?.region || config?.region || Env('AWS_REGION')
-    this.endpoint =
-      options?.endpoint || config?.endpoint || Env('AWS_ENDPOINT')
+    this.endpoint = options?.endpoint || config?.endpoint || Env('AWS_ENDPOINT')
     this.awsAccessKeyId =
       options?.awsAccessKeyId ||
       config?.awsAccessKeyId ||

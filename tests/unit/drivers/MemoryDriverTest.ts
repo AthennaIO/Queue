@@ -193,9 +193,7 @@ export class MemoryDriverTest {
   }
 
   @Test()
-  public async shouldAbandonAHangingProcessorAfterWorkerTimeoutMsAndDeadletterIt({
-    assert
-  }: Context) {
+  public async shouldAbandonAHangingProcessorAfterWorkerTimeoutMsAndDeadletterIt({ assert }: Context) {
     const queue = Queue.connection('memoryTimeout')
 
     await queue.add({ name: 'lenon' })
