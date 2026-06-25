@@ -135,7 +135,9 @@ export class FakeDriverTest {
   public async shouldBeAbleToPeekTheNextJobWithoutRemovingItFromTheQueue({ assert }: Context) {
     const queue = Queue.connection('fake')
 
-    Mock.when(queue.driver, 'peek').resolve({ name: 'lenon' })
+    const expected = { id: '1', attempts: 0, data: { name: 'lenon' } }
+
+    Mock.when(queue.driver, 'peek').resolve(expected)
     Mock.when(queue.driver, 'length').resolve(1)
 
     await queue.add({ name: 'lenon' })
@@ -143,7 +145,7 @@ export class FakeDriverTest {
     const job = await queue.peek()
     const length = await queue.length()
 
-    assert.deepEqual(job, { name: 'lenon' })
+    assert.deepEqual(job, expected)
     assert.deepEqual(length, 1)
   }
 
@@ -151,7 +153,9 @@ export class FakeDriverTest {
   public async shouldBeAbleToPopTheNextJobRemovingItFromTheQueue({ assert }: Context) {
     const queue = Queue.connection('fake')
 
-    Mock.when(queue.driver, 'pop').resolve({ name: 'lenon' })
+    const expected = { id: '1', attempts: 0, data: { name: 'lenon' } }
+
+    Mock.when(queue.driver, 'pop').resolve(expected)
     Mock.when(queue.driver, 'length').resolve(0)
 
     await queue.add({ name: 'lenon' })
@@ -159,7 +163,7 @@ export class FakeDriverTest {
     const job = await queue.pop()
     const length = await queue.length()
 
-    assert.deepEqual(job, { name: 'lenon' })
+    assert.deepEqual(job, expected)
     assert.deepEqual(length, 0)
   }
 
