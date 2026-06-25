@@ -7,15 +7,14 @@
  * file that was distributed with this source code.
  */
 
+import { Is } from '@athenna/common'
 import { Log } from '@athenna/logger'
 import { Queue } from '#src/facades/Queue'
-import { Is, Parser } from '@athenna/common'
 import { WorkerImpl } from '#src/worker/WorkerImpl'
 import type { Context, ConnectionOptions } from '#src/types'
 import type { WorkerHandler } from '#src/types/WorkerHandler'
 import { RUN_WITH_WORKER_CONTEXT } from '#src/drivers/Driver'
 import { QueueExecutionScope } from '#src/worker/QueueExecutionScope'
-import { WorkerTimeoutException } from '#src/exceptions/WorkerTimeoutException'
 import { QueueJobPropagationHelper } from '#src/helpers/QueueJobPropagationHelper'
 
 export class WorkerTaskBuilder {
@@ -219,13 +218,6 @@ export class WorkerTaskBuilder {
         1000
       )
 
-    const timeoutMs =
-      this.worker.options?.workerTimeoutMs ??
-      Config.get(
-        `queue.connections.${this.worker.connection}.workerTimeoutMs`,
-        Parser.timeToMs('5m')
-      )
-
     const initialOffset = this.computeInitialOffset(intervalToRun)
 
     const loop = async () => {
@@ -234,15 +226,12 @@ export class WorkerTaskBuilder {
       }
 
       try {
-        await Promise.race([
-          this.run(),
-          new Promise((resolve, reject) =>
-            setTimeout(
-              () => reject(new WorkerTimeoutException(this.worker.name)),
-              timeoutMs
-            )
-          )
-        ])
+        /**
+         * `workerTimeoutMs` is enforced inside the driver's `process()` now
+         * (see `Driver.runWithTimeout`), so a hung handler is abandoned and
+         * routed through retry/deadletter from there — no outer race needed.
+         */
+        await this.run()
       } catch (err) {
         Log.channelOrVanilla('exception').error(err)
       } finally {

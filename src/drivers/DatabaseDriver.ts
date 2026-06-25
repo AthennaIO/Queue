@@ -336,7 +336,7 @@ export class DatabaseDriver extends Driver<DatabaseImpl> {
 
     await this.runScopedQueueProcessor(processor, workerJob, async () => {
       try {
-        await processor(executionJob)
+        await this.runWithTimeout(() => processor(executionJob))
 
         /**
          * If the job still exists after processing, it means that the job was

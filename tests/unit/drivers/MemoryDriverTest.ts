@@ -33,6 +33,7 @@ export class MemoryDriverTest {
 
     await Queue.connection('memory').truncate()
     await Queue.connection('memoryBackoff').truncate()
+    await Queue.connection('memoryTimeout').truncate()
     await Queue.closeAll()
     await new OtelProvider().shutdown()
 
@@ -185,6 +186,36 @@ export class MemoryDriverTest {
     await queue.process(async () => {
       throw new Error('testing')
     })
+
+    const length = await queue.queue('deadletter').length()
+
+    assert.deepEqual(length, 1)
+  }
+
+  @Test()
+  public async shouldAbandonAHangingProcessorAfterWorkerTimeoutMsAndDeadletterIt({
+    assert
+  }: Context) {
+    const queue = Queue.connection('memoryTimeout')
+
+    await queue.add({ name: 'lenon' })
+
+    const startedAt = Date.now()
+
+    /**
+     * A handler that never resolves — without `workerTimeoutMs` this would
+     * wedge `process()` forever (a hung HTTP/DB await). With it, the job is
+     * abandoned after 200ms and routed to the deadletter so the consumer
+     * loop is freed. `process()` returning at all is the proof it no longer
+     * wedges; the deadletter is the proof the job was treated as failed (a
+     * job that completes normally is acked and removed, not deadlettered).
+     */
+    await queue.process(() => new Promise(() => {}))
+
+    const elapsed = Date.now() - startedAt
+
+    assert.isAbove(elapsed, 150)
+    assert.isBelow(elapsed, 5000)
 
     const length = await queue.queue('deadletter').length()
 

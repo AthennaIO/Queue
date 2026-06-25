@@ -54,6 +54,13 @@ export default {
       }
     },
 
+    memoryTimeout: {
+      driver: 'memory',
+      queue: 'default',
+      deadletter: 'deadletter',
+      workerTimeoutMs: 200
+    },
+
     aws_sqs: {
       driver: 'aws_sqs',
       type: 'standard',
