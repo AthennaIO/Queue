@@ -35,6 +35,7 @@ export class AwsSqsDriver extends Driver<SQSClient> {
 
   private type: 'standard' | 'fifo'
   private region: string
+  private endpoint?: string
   private awsAccessKeyId: string
   private awsSecretAccessKey: string
 
@@ -95,6 +96,7 @@ export class AwsSqsDriver extends Driver<SQSClient> {
 
     this.type = options?.type || config?.type || 'standard'
     this.region = options?.region || config?.region || Env('AWS_REGION')
+    this.endpoint = options?.endpoint || config?.endpoint || Env('AWS_ENDPOINT')
     this.awsAccessKeyId =
       options?.awsAccessKeyId ||
       config?.awsAccessKeyId ||
@@ -161,6 +163,14 @@ export class AwsSqsDriver extends Driver<SQSClient> {
      */
     if (!Is.Defined(this.awsAccessKeyId) || Env('AWS_SESSION_TOKEN')) {
       sqsClientOptions = {}
+    }
+
+    /**
+     * Apply the custom endpoint last so it survives the credentials reset
+     * above (e.g. LocalStack with blank credentials).
+     */
+    if (Is.Defined(this.endpoint)) {
+      sqsClientOptions.endpoint = this.endpoint
     }
 
     this.client = new SQSClient(sqsClientOptions)
@@ -443,7 +453,7 @@ export class AwsSqsDriver extends Driver<SQSClient> {
         try {
           startHeartbeat()
 
-          await processor(executionJob)
+          await this.runWithTimeout(() => processor(executionJob))
 
           stopHeartbeat()
 

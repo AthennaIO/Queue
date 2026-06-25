@@ -8,10 +8,11 @@
  */
 
 import { Utils } from '#src/utils'
-import { Is } from '@athenna/common'
+import { Is, Parser } from '@athenna/common'
 import { Config } from '@athenna/config'
 import type { Job, ConnectionOptions } from '#src/types'
 import { QueueExecutionScope } from '#src/worker/QueueExecutionScope'
+import { WorkerTimeoutException } from '#src/exceptions/WorkerTimeoutException'
 import { QueueJobPropagationHelper } from '#src/helpers/QueueJobPropagationHelper'
 
 export const RUN_WITH_WORKER_CONTEXT = Symbol.for(
@@ -80,6 +81,18 @@ export abstract class Driver<Client = any> {
   public workerInterval: number
 
   /**
+   * Set the maximum time in milliseconds that a single job is allowed to
+   * stay inside the `process()` handler. When a job exceeds it, a
+   * `WorkerTimeoutException` is thrown so the consumer loop is freed instead
+   * of being wedged forever by a hung handler — the job is then routed
+   * through the driver's normal retry/deadletter flow. Honored by every
+   * driver's `process()` and by every consumer that calls it (the `@Worker`
+   * harness, the `@athenna/event` consumer and direct `Queue.process()`).
+   * A value of `0` disables it. Defaults to `5m`.
+   */
+  public workerTimeoutMs: number
+
+  /**
    * Set the driver backoff of the driver.
    */
   public backoff?: {
@@ -118,6 +131,10 @@ export abstract class Driver<Client = any> {
     this.deadletter = options?.deadletter || config.deadletter
     this.visibilityTimeout =
       options?.visibilityTimeout || config.visibilityTimeout || 30000
+    this.workerTimeoutMs =
+      options?.workerTimeoutMs ??
+      config?.workerTimeoutMs ??
+      Parser.timeToMs('5m')
     this.connection = connection
 
     if (client) {
@@ -186,6 +203,40 @@ export abstract class Driver<Client = any> {
     const random = Math.floor(Math.random() * (max - baseDelay + 1)) + baseDelay
 
     return random
+  }
+
+  /**
+   * Run `fn` bounded by `workerTimeoutMs`. If it does not settle in time the
+   * returned promise rejects with a `WorkerTimeoutException`, which each
+   * driver's `process()` catch routes through the normal retry/deadletter
+   * flow — freeing the (serial) consumer loop instead of letting one hung
+   * handler wedge the whole queue. The losing `fn` promise keeps running
+   * until it settles (JS promises are not cancellable); `Promise.race`
+   * already attaches a reaction to it, so its late rejection will not surface
+   * as an unhandledRejection. This is a backstop, not a substitute for
+   * bounding the await at its source.
+   */
+  protected runWithTimeout<T>(fn: () => T | Promise<T>): Promise<T> {
+    if (!this.workerTimeoutMs || this.workerTimeoutMs <= 0) {
+      return Promise.resolve(fn())
+    }
+
+    let timer: NodeJS.Timeout
+
+    const timeout = new Promise<never>((_resolve, reject) => {
+      timer = setTimeout(
+        () =>
+          reject(
+            new WorkerTimeoutException(this.queueName, this.workerTimeoutMs)
+          ),
+        this.workerTimeoutMs
+      )
+      timer.unref?.()
+    })
+
+    return Promise.race([Promise.resolve(fn()), timeout]).finally(() =>
+      clearTimeout(timer)
+    ) as Promise<T>
   }
 
   protected runScopedQueueProcessor<T>(

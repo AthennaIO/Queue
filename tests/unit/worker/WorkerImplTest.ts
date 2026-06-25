@@ -9,18 +9,24 @@
 
 import { Queue } from '#src'
 import { Path, Sleep } from '@athenna/common'
+import { Otel, OtelProvider } from '@athenna/otel'
 import { LoggerProvider } from '@athenna/logger'
 import { WorkerImpl } from '#src/worker/WorkerImpl'
+import { context } from '@opentelemetry/api'
 import { QueueProvider } from '#src/providers/QueueProvider'
 import { WorkerProvider } from '#src/providers/WorkerProvider'
+import { AsyncLocalStorageContextManager } from '@opentelemetry/context-async-hooks'
 import { Test, BeforeEach, AfterEach, type Context } from '@athenna/test'
 import { NotFoundWorkerTaskException } from '#src/exceptions/NotFoundWorkerTaskException'
 
 export class WorkerImplTest {
   @BeforeEach()
   public async beforeEach() {
+    context.setGlobalContextManager(new AsyncLocalStorageContextManager().enable())
     await Config.loadAll(Path.fixtures('config'))
 
+    new OtelProvider().register()
+    Otel.start()
     new LoggerProvider().register()
     new QueueProvider().register()
     new WorkerProvider().register()
@@ -28,10 +34,13 @@ export class WorkerImplTest {
 
   @AfterEach()
   public async afterEach() {
+    context.disable()
+
     WorkerImpl.loggerIsSet = false
 
     await new QueueProvider().shutdown()
     await new WorkerProvider().shutdown()
+    await new OtelProvider().shutdown()
 
     ioc.reconstruct()
     Config.clear()

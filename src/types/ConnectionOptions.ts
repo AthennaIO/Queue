@@ -94,6 +94,15 @@ export type ConnectionOptions = {
     queue?: string
 
     /**
+     * Define a custom endpoint for the SQS client. Useful to point the
+     * driver at LocalStack or any other AWS-compatible emulator.
+     *
+     * @example 'http://localhost:4566'
+     * @default Env('AWS_ENDPOINT')
+     */
+    endpoint?: string
+
+    /**
      * Define the visibility timeout of the worker in seconds.
      * If your worker is not able to process a job in the
      * defined time, the job will be put back in the queue.
@@ -101,5 +110,20 @@ export type ConnectionOptions = {
      * @default 30
      */
     visibilityTimeout?: number
+
+    /**
+     * Define the maximum time in milliseconds that a single job is
+     * allowed to spend inside the `process()` handler. When a job
+     * exceeds it, the handler is abandoned with a `WorkerTimeoutException`
+     * and routed through the normal retry/deadletter flow, freeing the
+     * (serial) consumer loop instead of letting one hung handler wedge
+     * the whole queue. Honored by every driver and by every consumer that
+     * calls `process()` (the `@Worker` harness, the `@athenna/event`
+     * consumer and direct `Queue.process()`). Set it just above your legit
+     * max handler time. A value of `0` disables the timeout.
+     *
+     * @default Parser.timeToMs('5m')
+     */
+    workerTimeoutMs?: number
   }
 }
