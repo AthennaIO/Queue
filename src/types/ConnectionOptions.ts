@@ -125,5 +125,17 @@ export type ConnectionOptions = {
      * @default Parser.timeToMs('5m')
      */
     workerTimeoutMs?: number
+
+    /**
+     * Define how many independent consumer loops run in parallel for this
+     * connection. Each loop still pulls and processes ONE job at a time, so a
+     * value of `N` yields an effective concurrency of `N`. This is honored by
+     * the `@athenna/event` consumer; raise it to drain a backed-up queue faster
+     * without spinning up extra processes. When the option is `null`/unset it
+     * defaults to `0`, which falls back to a single serial loop (one-by-one).
+     *
+     * @default Config.get(`queue.connections.${connection}.workerConcurrency`, 0)
+     */
+    workerConcurrency?: number
   }
 }
