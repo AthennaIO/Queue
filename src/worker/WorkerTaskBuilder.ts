@@ -200,11 +200,34 @@ export class WorkerTaskBuilder {
       return
     }
 
-    const n = this.worker.concurrency ?? 1
+    const n = this.resolveConcurrency()
 
     for (let i = 0; i < n; i++) {
       this.spawn()
     }
+  }
+
+  /**
+   * Resolve how many worker loops to spawn. An explicit `concurrency` set on
+   * the worker (e.g. via `@Worker({ concurrency })`) wins, then the worker
+   * `options.workerConcurrency`, then the connection's `workerConcurrency`
+   * config. When none is a positive number it falls back to a single serial
+   * loop.
+   */
+  private resolveConcurrency(): number {
+    const explicit =
+      this.worker.concurrency ?? this.worker.options?.workerConcurrency
+
+    if (Is.Number(explicit) && explicit > 0) {
+      return explicit
+    }
+
+    const configured = Config.get(
+      `queue.connections.${this.worker.connection}.workerConcurrency`,
+      0
+    )
+
+    return configured > 0 ? configured : 1
   }
 
   /**

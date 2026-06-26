@@ -16,9 +16,12 @@ export type WorkerOptions = {
   name?: string
 
   /**
-   * Define how much instances of the same worker could run in parallel.
+   * Define how many instances of the same worker run in parallel. Each
+   * instance still processes one job at a time, so a value of `N` yields an
+   * effective concurrency of `N`. When omitted, the worker falls back to the
+   * connection's `workerConcurrency` config and, if that is `0`/unset, to `1`.
    *
-   * @default 1
+   * @default Config.get(`queue.connections.${connection}.workerConcurrency`, 1)
    */
   concurrency?: number
 
