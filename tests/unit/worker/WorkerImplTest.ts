@@ -177,6 +177,68 @@ export class WorkerImplTest {
   }
 
   @Test()
+  public async shouldSpawnASingleLoopWhenNoConcurrencyIsConfigured({ assert }: Context) {
+    const builder = Queue.worker()
+      .task()
+      .name('default_concurrency')
+      .connection('memory')
+      .handler(() => {})
+
+    builder.start()
+
+    assert.lengthOf((builder as any).timers, 1)
+
+    builder.stop()
+  }
+
+  @Test()
+  public async shouldSpawnConcurrentLoopsBasedOnConnectionWorkerConcurrencyConfig({ assert }: Context) {
+    const builder = Queue.worker()
+      .task()
+      .name('config_concurrency')
+      .connection('memoryConcurrent')
+      .handler(() => {})
+
+    builder.start()
+
+    assert.lengthOf((builder as any).timers, 3)
+
+    builder.stop()
+  }
+
+  @Test()
+  public async shouldSpawnConcurrentLoopsFromWorkerOptionsWorkerConcurrency({ assert }: Context) {
+    const builder = Queue.worker()
+      .task()
+      .name('options_concurrency')
+      .connection('memory')
+      .options({ workerConcurrency: 4 })
+      .handler(() => {})
+
+    builder.start()
+
+    assert.lengthOf((builder as any).timers, 4)
+
+    builder.stop()
+  }
+
+  @Test()
+  public async shouldLetExplicitConcurrencyOverrideTheConnectionWorkerConcurrencyConfig({ assert }: Context) {
+    const builder = Queue.worker()
+      .task()
+      .name('explicit_concurrency')
+      .connection('memoryConcurrent')
+      .concurrency(5)
+      .handler(() => {})
+
+    builder.start()
+
+    assert.lengthOf((builder as any).timers, 5)
+
+    builder.stop()
+  }
+
+  @Test()
   public async shouldBeAbleToCreateAWorkerTaskWithCustomOptions({ assert }: Context) {
     Queue.worker()
       .task()

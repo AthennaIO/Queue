@@ -61,6 +61,13 @@ export default {
       workerTimeoutMs: 200
     },
 
+    memoryConcurrent: {
+      driver: 'memory',
+      queue: 'default',
+      deadletter: 'deadletter',
+      workerConcurrency: 3
+    },
+
     aws_sqs: {
       driver: 'aws_sqs',
       type: 'standard',

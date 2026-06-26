@@ -19,6 +19,7 @@ export * from '#src/drivers/DatabaseDriver'
 export * from '#src/factories/ConnectionFactory'
 
 export * from '#src/facades/Queue'
+export * from '#src/worker/BaseWorker'
 export * from '#src/worker/WorkerImpl'
 export * from '#src/providers/QueueProvider'
 export * from '#src/providers/WorkerProvider'
