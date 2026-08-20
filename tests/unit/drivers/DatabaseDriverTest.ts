@@ -189,6 +189,26 @@ export class DatabaseDriverTest {
   }
 
   @Test()
+  public async shouldRunAJobOnlyOnceWhenConcurrentWorkersProcessTheSameQueue({ assert }: Context) {
+    const queue = Queue.connection('database')
+
+    await queue.add({ name: 'lenon' })
+
+    let processed = 0
+
+    await Promise.all([
+      queue.process(async () => {
+        processed++
+      }),
+      queue.process(async () => {
+        processed++
+      })
+    ])
+
+    assert.equal(processed, 1)
+  }
+
+  @Test()
   public async shouldBeAbleToSendTheJobToDeadletterQueueIfProcessorFails({ assert }: Context) {
     const queue = Queue.connection('database')
 

@@ -267,6 +267,39 @@ export class DatabaseDriver extends Driver<DatabaseImpl> {
   }
 
   /**
+   * Reserve `job` for THIS worker, returning whether the claim was won.
+   *
+   * The claim MUST be exclusive. Worker loops run concurrently (see
+   * `WorkerTaskBuilder.spawn`) and every loop that polls inside the same
+   * window selects the SAME head-of-queue row, so this compare-and-swap on
+   * `reservedUntil` is the only thing standing between one queued job and N
+   * parallel executions of it.
+   *
+   * The verdict comes from the UPDATE's affected-row count, taken straight
+   * from the underlying query builder. The `QueryBuilder.update()` wrapper
+   * CANNOT answer the question: it discards the row count, re-runs the SELECT
+   * with the same where clause and returns those rows — and after a claim the
+   * where clause (`reservedUntil` null or expired) matches nothing, so it
+   * returns `[]` for the winner and the loser alike. An empty array is truthy,
+   * so the `if (!updatedJob) return` this replaced never fired once, and every
+   * worker that read the row went on to run the job (observed in production:
+   * a single queued job executed by three workers in parallel).
+   */
+  private async claim(job: any, now: number): Promise<boolean> {
+    const affectedRows = await this.client
+      .table(this.table)
+      .where('id', job.id)
+      .where('queue', this.queueName)
+      .where((qb: any) =>
+        qb.whereNull('reservedUntil').orWhere('reservedUntil', '<=', now)
+      )
+      .getQueryBuilder()
+      .update({ attempts: job.attempts, reservedUntil: job.reservedUntil })
+
+    return affectedRows > 0
+  }
+
+  /**
    * Process the next job of the queue with a handler.
    *
    * @example
@@ -307,21 +340,9 @@ export class DatabaseDriver extends Driver<DatabaseImpl> {
     job.reservedUntil = Date.now() + this.visibilityTimeout
 
     /**
-     * Trying to claim the job for this worker.
+     * If job is not claimed, it means another worker has claimed the job.
      */
-    const updatedJob = await this.client
-      .table(this.table)
-      .where('id', job.id)
-      .where('queue', this.queueName)
-      .where((qb: any) =>
-        qb.whereNull('reservedUntil').orWhere('reservedUntil', '<=', now)
-      )
-      .update({ attempts: job.attempts, reservedUntil: job.reservedUntil })
-
-    /**
-     * If job is not updated, it means another worker has claimed the job.
-     */
-    if (!updatedJob) {
+    if (!(await this.claim(job, now))) {
       return
     }
 

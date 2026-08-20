@@ -13,7 +13,17 @@ export default {
   connections: {
     sqlite: {
       driver: 'sqlite',
-      connection: ':memory:'
+      connection: ':memory:',
+      /**
+       * An in-memory SQLite database lives inside ONE connection: a second
+       * pooled connection opens a second, EMPTY database ("no such table:
+       * jobs"). Pinning the pool to a single connection is what lets a test
+       * run two concurrent queries against the same fixture data.
+       */
+      pool: {
+        min: 1,
+        max: 1
+      }
     }
   }
 }
