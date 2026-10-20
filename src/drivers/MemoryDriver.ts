@@ -7,6 +7,7 @@
  * file that was distributed with this source code.
  */
 
+import { Utils } from '#src/utils'
 import { Driver } from '#src/drivers/Driver'
 import { Options, Uuid } from '@athenna/common'
 import type { ConnectionOptions } from '#src/types'
@@ -105,12 +106,34 @@ export class MemoryDriver extends Driver {
    * ```
    */
   public async add(data: unknown) {
+    this.push(data, Date.now())
+  }
+
+  /**
+   * Add a new job to the queue that only becomes available after a delay
+   * in milliseconds or at an exact `Date`.
+   *
+   * @example
+   * ```ts
+   * await Queue.queue('mail').later(5000, { email: 'lenon@athenna.io' })
+   * ```
+   */
+  public async later(delay: number | Date, data: unknown) {
+    const now = Date.now()
+
+    this.push(data, now + Utils.resolveDelayMs(delay, now))
+  }
+
+  /**
+   * Push the job that becomes available at `availableAt`.
+   */
+  private push(data: unknown, availableAt: number) {
     this.defineQueue()
 
     this.client.queues[this.queueName].push({
       id: Uuid.generate(),
       attempts: this.attempts,
-      availableAt: Date.now(),
+      availableAt,
       reservedUntil: null,
       createdAt: Date.now(),
       data
@@ -144,11 +167,24 @@ export class MemoryDriver extends Driver {
   public async pop() {
     this.defineQueue()
 
-    if (!this.client.queues[this.queueName].length) {
+    await this.releaseExpiredLeases()
+
+    const now = Date.now()
+
+    /**
+     * Only pop a job that is already available and not reserved by a
+     * worker, the same rule used by `peek()` and `process()`. Without it a
+     * job delayed with `later()` would be popped before its time.
+     */
+    const index = this.client.queues[this.queueName].findIndex(job => {
+      return job.availableAt <= now && !job.reservedUntil
+    })
+
+    if (index === -1) {
       return null
     }
 
-    return this.client.queues[this.queueName].shift()
+    return this.client.queues[this.queueName].splice(index, 1)[0]
   }
 
   /**

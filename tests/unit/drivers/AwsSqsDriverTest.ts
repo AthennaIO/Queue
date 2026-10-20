@@ -12,10 +12,13 @@ import { EnvHelper } from '@athenna/config'
 import { Otel, OtelProvider } from '@athenna/otel'
 import { BaseTest } from '#tests/helpers/BaseTest'
 import { Log, LoggerProvider } from '@athenna/logger'
-import { Queue, WorkerProvider, QueueProvider } from '#src'
 import { context, createContextKey } from '@opentelemetry/api'
+import { Queue, WorkerProvider, QueueProvider, type QueueImpl, type AwsSqsDriver } from '#src'
 import { AsyncLocalStorageContextManager } from '@opentelemetry/context-async-hooks'
+import { InvalidJobDelayException } from '#src/exceptions/InvalidJobDelayException'
 import { Test, type Context, BeforeEach, AfterEach, Skip, AfterAll, Mock } from '@athenna/test'
+import { SqsMaxDelayExceededException } from '#src/exceptions/SqsMaxDelayExceededException'
+import { FifoSqsDelayNotSupportedException } from '#src/exceptions/FifoSqsDelayNotSupportedException'
 
 export class AwsSqsDriverTest extends BaseTest {
   @BeforeEach()
@@ -63,6 +66,16 @@ export class AwsSqsDriverTest extends BaseTest {
     ioc.reconstruct()
 
     Config.clear()
+  }
+
+  /**
+   * Stub the SQS client so the command sent by the driver can be asserted
+   * without sending a real message.
+   */
+  private stubSqsSend(queue: QueueImpl) {
+    const client = (queue.driver as AwsSqsDriver).client
+
+    return Mock.when(client, 'send').resolve({}).get()
   }
 
   @Test()
@@ -330,6 +343,123 @@ export class AwsSqsDriverTest extends BaseTest {
 
     assert.isTrue(calls.length >= 1)
     assert.isTrue(calls.every(value => value === 'aws_sqs'))
+  }
+
+  @Test()
+  public async shouldSendTheLaterDelayToSqsAsDelaySecondsRoundedUp({ assert }: Context) {
+    const queue = Queue.connection('aws_sqs')
+    const send = this.stubSqsSend(queue)
+
+    await queue.later(1500, { name: 'lenon' })
+
+    const input = send.firstCall.args[0].input
+
+    assert.calledOnce(send)
+    assert.deepEqual(input, {
+      QueueUrl: Config.get('queue.connections.aws_sqs.queue'),
+      MessageBody: JSON.stringify({ name: 'lenon' }),
+      DelaySeconds: 2
+    })
+  }
+
+  @Test()
+  public async shouldSendTheDelaySecondsUntilAnExactDate({ assert }: Context) {
+    const queue = Queue.connection('aws_sqs')
+    const send = this.stubSqsSend(queue)
+
+    await queue.later(new Date(Date.now() + 10 * 60 * 1000), { name: 'lenon' })
+
+    assert.equal(send.firstCall.args[0].input.DelaySeconds, 600)
+  }
+
+  @Test()
+  public async shouldAcceptTheMaximumSqsDelayOf15Minutes({ assert }: Context) {
+    const queue = Queue.connection('aws_sqs')
+    const send = this.stubSqsSend(queue)
+
+    await queue.later(15 * 60 * 1000, { name: 'lenon' })
+
+    assert.equal(send.firstCall.args[0].input.DelaySeconds, 900)
+  }
+
+  @Test()
+  public async shouldThrowSqsMaxDelayExceededExceptionWhenTheDelayIsLongerThan15Minutes({ assert }: Context) {
+    const queue = Queue.connection('aws_sqs')
+    const send = this.stubSqsSend(queue)
+
+    await assert.rejects(() => queue.later(15 * 60 * 1000 + 1, { name: 'lenon' }), SqsMaxDelayExceededException)
+    await assert.rejects(
+      () => queue.later(new Date(Date.now() + 60 * 60 * 1000), { name: 'lenon' }),
+      SqsMaxDelayExceededException
+    )
+
+    assert.notCalled(send)
+  }
+
+  @Test()
+  public async shouldSendJobsWithoutDelaySecondsWhenTheLaterDelayIsZeroNegativeOrAPastDate({ assert }: Context) {
+    const queue = Queue.connection('aws_sqs')
+    const send = this.stubSqsSend(queue)
+
+    await queue.add({ name: 'add' })
+    await queue.later(0, { name: 'zero' })
+    await queue.later(-1000, { name: 'negative' })
+    await queue.later(new Date(Date.now() - 60000), { name: 'past' })
+
+    assert.calledTimes(send, 4)
+
+    send.getCalls().forEach(call => {
+      assert.notProperty(call.args[0].input, 'DelaySeconds')
+    })
+  }
+
+  @Test()
+  public async shouldThrowInvalidJobDelayExceptionWhenTheLaterDelayIsInvalid({ assert }: Context) {
+    const queue = Queue.connection('aws_sqs')
+    const send = this.stubSqsSend(queue)
+
+    await assert.rejects(() => queue.later(NaN, { name: 'lenon' }), InvalidJobDelayException)
+    await assert.rejects(() => queue.later('1000' as any, { name: 'lenon' }), InvalidJobDelayException)
+    await assert.rejects(() => queue.driver.later(new Date('invalid'), { name: 'lenon' }), InvalidJobDelayException)
+
+    assert.notCalled(send)
+  }
+
+  @Test()
+  public async shouldThrowFifoSqsDelayNotSupportedExceptionWhenDelayingAJobInAFifoQueue({ assert }: Context) {
+    const queue = Queue.connection('aws_sqs', { options: { type: 'fifo', contentBasedDeduplication: true } })
+    const send = this.stubSqsSend(queue)
+
+    await assert.rejects(() => queue.later(5000, { name: 'lenon' }), FifoSqsDelayNotSupportedException)
+
+    assert.notCalled(send)
+
+    await queue.later(0, { name: 'lenon' })
+
+    const input = send.firstCall.args[0].input
+
+    assert.calledOnce(send)
+    assert.notProperty(input, 'DelaySeconds')
+    assert.equal(input.MessageGroupId, 'default')
+  }
+
+  @Test()
+  public async shouldApplyThePropagationEnvelopeToJobsAddedWithLater({ assert }: Context) {
+    const queue = Queue.connection('aws_sqs')
+    const send = this.stubSqsSend(queue)
+
+    Config.set('otel.enabled', true)
+
+    await Otel.withContext(async () => {
+      Otel.setCurrentContextValue('tenantId', 'tenant-1')
+
+      await queue.later(1000, { name: 'lenon' })
+    })
+
+    const body = JSON.parse(send.firstCall.args[0].input.MessageBody)
+
+    assert.deepEqual(body.__athenna_queue__.currentContextValues, { tenantId: 'tenant-1' })
+    assert.deepEqual(body.payload, { name: 'lenon' })
   }
 
   @Test()

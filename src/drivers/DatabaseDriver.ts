@@ -7,6 +7,7 @@
  * file that was distributed with this source code.
  */
 
+import { Utils } from '#src/utils'
 import { Config } from '@athenna/config'
 import { Driver } from '#src/drivers/Driver'
 import { Is, Options } from '@athenna/common'
@@ -121,10 +122,32 @@ export class DatabaseDriver extends Driver<DatabaseImpl> {
    * ```
    */
   public async add(data: unknown) {
+    await this.insert(data, Date.now())
+  }
+
+  /**
+   * Add a new job to the queue that only becomes available after a delay
+   * in milliseconds or at an exact `Date`.
+   *
+   * @example
+   * ```ts
+   * await Queue.queue('mail').later(5000, { email: 'lenon@athenna.io' })
+   * ```
+   */
+  public async later(delay: number | Date, data: unknown) {
+    const now = Date.now()
+
+    await this.insert(data, now + Utils.resolveDelayMs(delay, now))
+  }
+
+  /**
+   * Insert the job row that becomes available at `availableAt`.
+   */
+  private async insert(data: unknown, availableAt: number) {
     await this.client.table(this.table).create({
       queue: this.queueName,
       attempts: this.attempts,
-      availableAt: Date.now(),
+      availableAt,
       reservedUntil: null,
       createdAt: Date.now(),
       data

@@ -7,6 +7,7 @@
  * file that was distributed with this source code.
  */
 
+import { Utils } from '#src/utils'
 import { Log } from '@athenna/logger'
 import { Is, Json, Options } from '@athenna/common'
 import type { Job, ConnectionOptions } from '#src/types'
@@ -161,6 +162,20 @@ export class FakeDriver {
    * ```
    */
   public static async add() {}
+
+  /**
+   * Add a new job to the queue that only becomes available after a delay.
+   * Like `add()`, nothing is stored, but an invalid delay still throws so
+   * your tests fail the same way your application would.
+   *
+   * @example
+   * ```ts
+   * await Queue.later(5000, { name: 'lenon' })
+   * ```
+   */
+  public static async later(delay: number | Date, _data?: unknown) {
+    Utils.resolveDelayMs(delay)
+  }
 
   /**
    * Remove an job from the queue and return.

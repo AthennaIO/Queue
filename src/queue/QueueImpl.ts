@@ -7,6 +7,7 @@
  * file that was distributed with this source code.
  */
 
+import { Utils } from '#src/utils'
 import { Macroable } from '@athenna/common'
 import { Worker } from '#src/facades/Worker'
 import type { Job, ConnectionOptions } from '#src/types'
@@ -183,6 +184,35 @@ export class QueueImpl<Driver = any> extends Macroable {
    */
   public async add(item: unknown) {
     await this.driver.add(QueueJobPropagationHelper.createEnvelope(item))
+  }
+
+  /**
+   * Add a new item to the queue that only becomes available for processing
+   * after a delay. A `number` is the delay in **milliseconds** from now and a
+   * `Date` is the exact instant when the item becomes available. A delay
+   * `<= 0` or a `Date` in the past makes the item available now, exactly
+   * like `add()`.
+   *
+   * @example
+   * ```ts
+   * // available in 3 hours
+   * await Queue.later(3 * 60 * 60 * 1000, { name: 'lenon' })
+   *
+   * // available at an exact instant
+   * await Queue.later(new Date('2026-10-20T16:00:00Z'), { name: 'lenon' })
+   * ```
+   */
+  public async later(delay: number | Date, item: any): Promise<void> {
+    /**
+     * Validate before creating the envelope so an invalid delay fails the
+     * same way in every driver, including custom ones.
+     */
+    Utils.resolveDelayMs(delay)
+
+    await this.driver.later(
+      delay,
+      QueueJobPropagationHelper.createEnvelope(item)
+    )
   }
 
   /**

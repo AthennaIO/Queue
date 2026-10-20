@@ -15,6 +15,7 @@ import { context, createContextKey } from '@opentelemetry/api'
 import { AsyncLocalStorageContextManager } from '@opentelemetry/context-async-hooks'
 import { Test, type Context, BeforeEach, AfterEach, Mock } from '@athenna/test'
 import { Database, DatabaseImpl, DatabaseProvider } from '@athenna/database'
+import { InvalidJobDelayException } from '#src/exceptions/InvalidJobDelayException'
 
 export class DatabaseDriverTest {
   @BeforeEach()
@@ -314,6 +315,137 @@ export class DatabaseDriverTest {
 
     assert.equal(values.connection, 'database')
     assert.equal(values.attempts, 0)
+  }
+
+  @Test()
+  public async shouldNotPopAJobAddedWithLaterBeforeItsTime({ assert }: Context) {
+    const queue = Queue.connection('database')
+
+    const before = Date.now()
+    await queue.later(300, { name: 'lenon' })
+    const after = Date.now()
+
+    const row = await Database.table('jobs').find()
+
+    assert.isAtLeast(row.availableAt, before + 300)
+    assert.isAtMost(row.availableAt, after + 300)
+    assert.isNull(await queue.pop())
+    assert.deepEqual(await queue.length(), 1)
+
+    await Sleep.for(400).milliseconds().wait()
+
+    const job = await queue.pop()
+
+    assert.deepEqual(await queue.length(), 0)
+    assert.containSubset(job, {
+      attempts: 1,
+      queue: 'default',
+      data: { name: 'lenon' }
+    })
+  }
+
+  @Test()
+  public async shouldNotPeekOrProcessAJobAddedWithLaterBeforeItsTime({ assert }: Context) {
+    const queue = Queue.connection('database')
+
+    await queue.later(300, { name: 'lenon' })
+
+    let processed = 0
+
+    assert.isNull(await queue.peek())
+
+    await queue.process(async () => {
+      processed++
+    })
+
+    assert.equal(processed, 0)
+
+    await Sleep.for(400).milliseconds().wait()
+
+    assert.containSubset(await queue.peek(), { data: { name: 'lenon' } })
+
+    await queue.process(async job => {
+      processed++
+
+      assert.deepEqual(job.data, { name: 'lenon' })
+    })
+
+    assert.equal(processed, 1)
+  }
+
+  @Test()
+  public async shouldBeAbleToAddJobsWithLaterUsingAnExactDate({ assert }: Context) {
+    const queue = Queue.connection('database')
+    const date = new Date(Date.now() + 300)
+
+    await queue.later(date, { name: 'lenon' })
+
+    const row = await Database.table('jobs').find()
+
+    assert.equal(row.availableAt, date.getTime())
+    assert.isNull(await queue.pop())
+
+    await Sleep.for(400).milliseconds().wait()
+
+    assert.containSubset(await queue.pop(), { data: { name: 'lenon' } })
+  }
+
+  @Test()
+  public async shouldMakeTheJobAvailableNowWhenTheLaterDelayIsZeroNegativeOrAPastDate({ assert }: Context) {
+    const queue = Queue.connection('database')
+
+    await queue.later(0, { name: 'zero' })
+    await queue.later(-1000, { name: 'negative' })
+    await queue.later(new Date(Date.now() - 60000), { name: 'past' })
+
+    const rows = await Database.table('jobs').findMany()
+
+    rows.forEach(row => assert.isAtMost(row.availableAt, Date.now()))
+
+    const names = []
+
+    for (let i = 0; i < 3; i++) {
+      const job = await queue.pop()
+
+      names.push(job.data.name)
+    }
+
+    assert.sameMembers(names, ['zero', 'negative', 'past'])
+    assert.isTrue(await queue.isEmpty())
+  }
+
+  @Test()
+  public async shouldThrowInvalidJobDelayExceptionWhenTheLaterDelayIsInvalid({ assert }: Context) {
+    const queue = Queue.connection('database')
+
+    await assert.rejects(() => queue.later(NaN, { name: 'lenon' }), InvalidJobDelayException)
+    await assert.rejects(() => queue.later('1000' as any, { name: 'lenon' }), InvalidJobDelayException)
+    await assert.rejects(() => queue.later(new Date('invalid'), { name: 'lenon' }), InvalidJobDelayException)
+    await assert.rejects(() => queue.driver.later(Infinity, { name: 'lenon' }), InvalidJobDelayException)
+
+    assert.isTrue(await queue.isEmpty())
+  }
+
+  @Test()
+  public async shouldApplyThePropagationEnvelopeToJobsAddedWithLater({ assert }: Context) {
+    const queue = Queue.connection('database')
+
+    Config.set('otel.enabled', true)
+
+    await Otel.withContext(async () => {
+      Otel.setCurrentContextValue('tenantId', 'tenant-1')
+
+      await queue.later(0, { name: 'lenon' })
+    })
+
+    const raw = await queue.driver.peek()
+
+    assert.deepEqual(raw.data.__athenna_queue__.currentContextValues, { tenantId: 'tenant-1' })
+    assert.deepEqual(raw.data.payload, { name: 'lenon' })
+
+    const job = await queue.pop()
+
+    assert.deepEqual(job.data, { name: 'lenon' })
   }
 
   @Test()

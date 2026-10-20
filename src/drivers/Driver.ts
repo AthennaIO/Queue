@@ -338,6 +338,14 @@ export abstract class Driver<Client = any> {
   public abstract add(data: unknown): Promise<void>
 
   /**
+   * Add a job to the queue that only becomes available for processing
+   * after a delay. A `number` is the delay in milliseconds from now and a
+   * `Date` is the exact instant. A delay `<= 0` or a past `Date` makes the
+   * job available now, exactly like `add()`.
+   */
+  public abstract later(delay: number | Date, data: unknown): Promise<void>
+
+  /**
    * Remove the first job from the queue and return.
    */
   public abstract pop<T = any>(): Promise<T>

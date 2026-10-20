@@ -17,6 +17,7 @@ import {
   ChangeMessageVisibilityCommand
 } from '@aws-sdk/client-sqs'
 
+import { Utils } from '#src/utils'
 import { createHash } from 'node:crypto'
 import { Driver } from '#src/drivers/Driver'
 import { Is, Options, Uuid } from '@athenna/common'
@@ -26,12 +27,20 @@ import { QueueExecutionScope } from '#src/worker/QueueExecutionScope'
 import { QueueJobPropagationHelper } from '#src/helpers/QueueJobPropagationHelper'
 import { AwsSqsDriverExceptionHandler } from '#src/handlers/AwsSqsDriverExceptionHandler'
 import { NotFifoSqsQueueTypeException } from '#src/exceptions/NotFifoSqsQueueTypeException'
+import { SqsMaxDelayExceededException } from '#src/exceptions/SqsMaxDelayExceededException'
+import { FifoSqsDelayNotSupportedException } from '#src/exceptions/FifoSqsDelayNotSupportedException'
 
 export class AwsSqsDriver extends Driver<SQSClient> {
   /**
    * Set the acked ids of the driver.
    */
   private static ackedIds = new Set<string>()
+
+  /**
+   * The maximum `DelaySeconds` accepted by SQS for a single message
+   * (15 minutes).
+   */
+  public static readonly MAX_DELAY_SECONDS = 900
 
   private type: 'standard' | 'fifo'
   private region: string
@@ -233,11 +242,49 @@ export class AwsSqsDriver extends Driver<SQSClient> {
    * ```
    */
   public async add(data: any) {
+    await this.send(data, 0)
+  }
+
+  /**
+   * Add a new job to the queue that only becomes available after a delay
+   * in milliseconds or at an exact `Date`. The delay is sent to SQS as the
+   * message `DelaySeconds`, rounded up to the next second, so it can't be
+   * longer than 15 minutes (900 seconds). FIFO queues don't support a delay
+   * per message, so only a delay `<= 0` is accepted for them.
+   *
+   * @example
+   * ```ts
+   * await Queue.queue('mail').later(5000, { email: 'lenon@athenna.io' })
+   * ```
+   */
+  public async later(delay: number | Date, data: any) {
+    const delaySeconds = Math.ceil(Utils.resolveDelayMs(delay) / 1000)
+
+    if (delaySeconds > 0 && this.type === 'fifo') {
+      throw new FifoSqsDelayNotSupportedException(this.queueName)
+    }
+
+    if (delaySeconds > AwsSqsDriver.MAX_DELAY_SECONDS) {
+      throw new SqsMaxDelayExceededException(this.queueName, delaySeconds)
+    }
+
+    await this.send(data, delaySeconds)
+  }
+
+  /**
+   * Send the job to SQS. A `delaySeconds` of `0` sends the message without
+   * `DelaySeconds`, exactly like `add()` always did.
+   */
+  private async send(data: any, delaySeconds: number) {
     data = Is.Object(data) ? JSON.stringify(data) : String(data)
 
     const params: any = {
       QueueUrl: this.queueName,
       MessageBody: data
+    }
+
+    if (delaySeconds > 0) {
+      params.DelaySeconds = delaySeconds
     }
 
     if (this.type === 'fifo') {

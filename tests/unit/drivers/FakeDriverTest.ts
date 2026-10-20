@@ -14,6 +14,7 @@ import { Log, LoggerProvider } from '@athenna/logger'
 import { context, createContextKey } from '@opentelemetry/api'
 import { AsyncLocalStorageContextManager } from '@opentelemetry/context-async-hooks'
 import { Test, type Context, Mock, BeforeEach, AfterEach } from '@athenna/test'
+import { InvalidJobDelayException } from '#src/exceptions/InvalidJobDelayException'
 
 export class FakeDriverTest {
   @BeforeEach()
@@ -120,6 +121,58 @@ export class FakeDriverTest {
 
     assert.isFalse(isEmpty)
     assert.deepEqual(length, 1)
+  }
+
+  @Test()
+  public async shouldBeAbleToAssertJobsAddedWithLater({ assert }: Context) {
+    const queue = Queue.connection('fake')
+    const date = new Date(Date.now() + 60000)
+    const later = Mock.spy(queue.driver, 'later')
+
+    await queue.later(5000, { name: 'lenon' })
+    await queue.queue('other').later(date, { name: 'txsoura' })
+
+    assert.calledTimes(later, 2)
+    assert.calledWith(later, 5000, { name: 'lenon' })
+    assert.calledWith(later, date, { name: 'txsoura' })
+  }
+
+  @Test()
+  public async shouldAcceptZeroNegativeAndPastDatesWhenAddingJobsWithLater({ assert }: Context) {
+    const queue = Queue.connection('fake')
+
+    await assert.doesNotReject(() => queue.later(0, { name: 'lenon' }))
+    await assert.doesNotReject(() => queue.later(-1000, { name: 'lenon' }))
+    await assert.doesNotReject(() => queue.later(new Date(Date.now() - 60000), { name: 'lenon' }))
+  }
+
+  @Test()
+  public async shouldThrowInvalidJobDelayExceptionWhenTheLaterDelayIsInvalid({ assert }: Context) {
+    const queue = Queue.connection('fake')
+
+    await assert.rejects(() => queue.later(NaN, { name: 'lenon' }), InvalidJobDelayException)
+    await assert.rejects(() => queue.later('1000' as any, { name: 'lenon' }), InvalidJobDelayException)
+    await assert.rejects(() => queue.driver.later(new Date('invalid'), { name: 'lenon' }), InvalidJobDelayException)
+  }
+
+  @Test()
+  public async shouldApplyThePropagationEnvelopeToJobsAddedWithLater({ assert }: Context) {
+    const queue = Queue.connection('fake')
+    const later = Mock.spy(queue.driver, 'later')
+
+    Config.set('otel.enabled', true)
+
+    await Otel.withContext(async () => {
+      Otel.setCurrentContextValue('tenantId', 'tenant-1')
+
+      await queue.later(5000, { name: 'lenon' })
+    })
+
+    const [delay, data] = later.firstCall.args
+
+    assert.equal(delay, 5000)
+    assert.deepEqual(data.__athenna_queue__.currentContextValues, { tenantId: 'tenant-1' })
+    assert.deepEqual(data.payload, { name: 'lenon' })
   }
 
   @Test()

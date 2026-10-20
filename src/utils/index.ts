@@ -7,6 +7,8 @@
  * file that was distributed with this source code.
  */
 
+import { InvalidJobDelayException } from '#src/exceptions/InvalidJobDelayException'
+
 export class Utils {
   /**
    * Hash a string.
@@ -49,5 +51,29 @@ export class Utils {
     }
 
     return Math.max(1, delay)
+  }
+
+  /**
+   * Resolve the delay given to `later()` into the number of milliseconds
+   * from `now` until the job becomes available. A `number` is a delay in
+   * milliseconds and a `Date` is the exact instant. A delay `<= 0` or a
+   * `Date` in the past resolves to `0` (available now). Fractions of a
+   * millisecond are rounded up, so a job never becomes available before
+   * its time. Anything else throws an `InvalidJobDelayException`.
+   */
+  public static resolveDelayMs(delay: number | Date, now = Date.now()) {
+    let delayMs: number
+
+    if (delay instanceof Date) {
+      delayMs = delay.getTime() - now
+    } else if (typeof delay === 'number') {
+      delayMs = delay
+    }
+
+    if (!Number.isFinite(delayMs)) {
+      throw new InvalidJobDelayException(delay)
+    }
+
+    return Math.max(0, Math.ceil(delayMs))
   }
 }
